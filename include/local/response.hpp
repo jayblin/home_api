@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <string>
 
+#ifndef RESPONSE_H_
+#define RESPONSE_H_
+
 /**
  * Aggregate initialization.
  */
@@ -18,3 +21,5 @@ namespace response
 	auto status(const Response&) -> std::string;
 }
 
+
+#endif // RESPONSE_H_
