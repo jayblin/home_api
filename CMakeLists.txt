@@ -5,10 +5,17 @@ project(culinary_api VERSION 0.0.1 LANGUAGES CXX)
 add_executable(
 	culinary_api
 	src/main.cpp
-	src/socket.cpp
+	src/windows/socket.cpp
+	# src/socket.cpp
 	src/response.cpp
 	src/request.cpp
 )
+
+if (WIN32)
+	target_link_libraries(culinary_api wsock32 ws2_32)
+endif()
+
+# add_compile_options(-fconcepts-diagnostics-depth=2)
 
 set_property(TARGET culinary_api PROPERTY CXX_STANDARD 20)
 

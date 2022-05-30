@@ -1,12 +1,18 @@
 #include "socket.hpp"
 #include "request.hpp"
 #include "response.hpp"
+#include "utils.hpp"
+
+#include <winsock2.h>
+#include <ws2tcpip.h>
 
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <unordered_map>
 #include <functional>
+#include <concepts>
+#include <type_traits>
 
 using RouteMap = std::unordered_map<
 	std::string,
@@ -83,30 +89,48 @@ auto match_method_with_request(
 
 int main(int argument, char const* argv[])
 {
-	auto constr_args = ConstructorArgs{
-		.domain = AF_INET,
-		.type = SOCK_STREAM,
-		.protocol = 0,
+	auto is_inited = jsocket::init_socket_lib();
+
+	if (!is_inited)
+	{
+		return 1;
+	}
+
+	auto constr_args = jsocket::ConstructorArgs{
+		.domain = jsocket::AddressFamily::INET,
+		.type = jsocket::SocketType::STREAM,
+		.protocol = jsocket::Protocol::TCP,
 	};
 
-	auto option = Option{
-		.level = SOL_SOCKET,
-		.name = SO_REUSEADDR|SO_REUSEPORT,
-		.value = 1
+	/* auto address = sockaddr_in{ */
+	/* 	.sin_family = AF_INET, */
+	/* 	.sin_port = htons(13098), */
+	/* 	.sin_addr = { */
+	/* 		.s_addr = INADDR_ANY, */
+	/* 	}, */
+	/* }; */
+
+	auto address = jsocket::Address{
+		.family = jsocket::AddressFamily::INET,
+		.port = "13908",
+		.addr = jsocket::BindingAddress::ANY,
 	};
 
-	auto address = sockaddr_in{
-		.sin_family = AF_INET,
-		.sin_port = htons(13098),
-		.sin_addr = {
-			.s_addr = INADDR_ANY,
-		},
-	};
+	/* auto sock = Socket{constr_args}; */
+	auto sock = jsocket::Socket{constr_args};
 
-	auto sock = Socket{constr_args};
-
-	sock.set_option(option)
+	sock
 		.bind(address)
+		.set_option({
+			.level = jsocket::OptionLevel::SOCKET,
+			.name = jsocket::OptionName::REUSEADDR,
+			.value = 1
+		})
+		.set_option({
+			.level = jsocket::OptionLevel::SOCKET,
+			.name = jsocket::OptionName::KEEPALIVE,
+			.value = 1
+		})
 		.listen(10)
 	;
 
@@ -124,17 +148,18 @@ int main(int argument, char const* argv[])
 			{
 				std::cout << error << "\n";
 			}
+
+			return 1;
 		}
 
 		auto new_socket = sock.accept(address);
 
-		char raw_request[1024] = {0};
+		const int l = 1024 * 5;
+		char raw_request[l] = {};
 
-		new_socket.read(&raw_request, 1024);
+		new_socket.read(&raw_request, l);
 		
 		auto request = Request{raw_request};
-
-		CLOG(request.path << " : " << request.query);
 
 		const auto response = match_method_with_request(request, map);
 
@@ -148,5 +173,7 @@ int main(int argument, char const* argv[])
 
 		new_socket.send(ss.view());
 	}
+
+	jsocket::close_socket_lib();
 }
 

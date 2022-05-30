@@ -1,39 +1,32 @@
+#include "socket-concept.hpp"
+#include "utils.hpp"
+
+#ifdef __unix__
+	#include "unix/socket.hpp"
+#elif defined(_WIN32) || defined(WIN32)
+	#include "windows/socket.hpp"
+#endif
+
 #include <string_view>
+#include <type_traits>
 #include <vector>
-#include <sys/socket.h>
-#include <netinet/in.h>
+#include <concepts>
 
-struct ConstructorArgs
+#ifndef LOCAL_SOCKET_H_
+#define LOCAL_SOCKET_H_
+
+namespace jsocket
 {
-	int domain;
-	int type;
-	int protocol;
-};
 
-struct Option
-{
-	int level;
-	int name;
-	int value;
-};
+#ifdef __unix__
+	using Socket = UnixSocket;
+#elif defined(_WIN32) || defined(WIN32)
+	using Socket = WindowsSocket;
+#endif
 
-class Socket
-{
-public:
-	Socket(ConstructorArgs);
-	Socket(int);
-	~Socket();
+}
 
-	auto set_option(Option) -> Socket&;
-	auto bind(sockaddr_in&) -> Socket&;
-	auto listen(const size_t con_number) -> Socket&;
-	auto read(void* buffer, size_t length) -> Socket&;
-	auto send(const std::string_view&) -> Socket&;
-	auto accept(sockaddr_in&) -> Socket;
-	auto errors() -> const std::vector<std::string>&;
+static_assert(provides_errors<jsocket::Socket>);
+static_assert(jsocket::is_socket<jsocket::Socket>);
 
-private:
-	int m_fd;
-	std::vector<std::string> m_errors;
-};
-
+#endif // LOCAL_SOCKET_H_
