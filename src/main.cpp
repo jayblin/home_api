@@ -1,6 +1,7 @@
 #include "socket.hpp"
 #include "request.hpp"
 #include "response.hpp"
+#include "utils.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -83,58 +84,35 @@ auto match_method_with_request(
 
 int main(int argument, char const* argv[])
 {
-	auto constr_args = ConstructorArgs{
-		.domain = AF_INET,
-		.type = SOCK_STREAM,
-		.protocol = 0,
-	};
+	if (!init_socket_lib())
+	{
+		return 1;
+	}
 
-	auto option = Option{
-		.level = SOL_SOCKET,
-		.name = SO_REUSEADDR|SO_REUSEPORT,
-		.value = 1
-	};
-
-	auto address = sockaddr_in{
-		.sin_family = AF_INET,
-		.sin_port = htons(13098),
-		.sin_addr = {
-			.s_addr = INADDR_ANY,
-		},
-	};
-
-	auto sock = Socket{constr_args};
-
-	sock.set_option(option)
-		.bind(address)
-		.listen(10)
-	;
+	auto sock = create_server_socket();
 
 	auto map = RouteMap{
 		{ "GET:/api/ingredients", &api::ingredients::get },
 	};
 
+
 	while (1)
 	{
-		auto& errors = sock.errors();
+		auto client_sock = accept(sock, NULL, NULL);
 
-		if (errors.size() > 0)
+		if (client_sock == INVALID_SOCKET)
 		{
-			for (auto& error : errors)
-			{
-				std::cout << error << "\n";
-			}
+			log_error("accept failed");
+			closesocket(client_sock);
+			continue;
 		}
 
-		auto new_socket = sock.accept(address);
+		const size_t l = 1024 * 5;
+		char buffer[l];
 
-		char raw_request[1024] = {0};
+		auto recv_result = recv(client_sock, buffer, l, 0);
 
-		new_socket.read(&raw_request, 1024);
-		
-		auto request = Request{raw_request};
-
-		CLOG(request.path << " : " << request.query);
+		auto request = Request{buffer};
 
 		const auto response = match_method_with_request(request, map);
 
@@ -146,7 +124,23 @@ int main(int argument, char const* argv[])
 			<< response.content
 		;
 
-		new_socket.send(ss.view());
+		auto send_result = send(
+			client_sock,
+			ss.view().data(),
+			ss.view().size(),
+			0
+		);
+
+		if (send_result == SOCKET_ERROR)
+		{
+			log_error("send failed");
+		}
+
+		closesocket(client_sock);
 	}
+
+	closesocket(sock);
+
+	WSACleanup();
 }
 

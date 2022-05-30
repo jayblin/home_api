@@ -10,6 +10,10 @@ add_executable(
 	src/request.cpp
 )
 
+if (WIN32)
+    target_link_libraries(culinary_api wsock32 ws2_32)
+endif()
+
 set_property(TARGET culinary_api PROPERTY CXX_STANDARD 20)
 
 configure_file(

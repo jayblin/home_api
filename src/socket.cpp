@@ -1,113 +1,99 @@
 #include "socket.hpp"
+#include "utils.hpp"
 
-#include <unistd.h>
-#include <string.h>
-#include <iostream>
+#include <string>
+#include <string_view>
 
-Socket::Socket(ConstructorArgs args)
-	: m_fd(socket(
-		args.domain,
-		args.type,
-		args.protocol
-	))
+void log_error(const std::string_view message)
 {
+	CLOG(message << " [" << std::to_string(WSAGetLastError()) << "]");
 }
 
-Socket::Socket(int fd)
-	: m_fd(fd)
+bool init_socket_lib()
 {
-}
+	WSADATA wsa_data;
 
-Socket::~Socket()
-{
-	close(m_fd);
-}
-
-Socket& Socket::set_option(Option option)
-{
-	auto opt = option.value;
-
-	const auto set_opt_result = setsockopt(
-		m_fd,
-		SOL_SOCKET,
-		SO_REUSEADDR | SO_REUSEPORT,
-		&opt,
-		sizeof(opt)
+	auto wsa_started = WSAStartup(
+		MAKEWORD(2,2), // use version 2.2 of Winsock
+		&wsa_data
 	);
 
-	if (set_opt_result == -1)
+	if (wsa_started != 0)
 	{
-		m_errors.push_back(
-			"[Error] Socket::set_option() " + std::string{strerror(errno)}
-		);
+		CLOG("couldnt start WSA");
+
+		return false;
 	}
 
-	return *this;
+	return true;
 }
 
-static auto _bind = bind;
-Socket& Socket::bind(sockaddr_in& address)
+SOCKET create_server_socket()
 {
-	const auto bind_result = _bind(
-		m_fd,
-		reinterpret_cast<sockaddr *>(&address),
-		sizeof(address)
+	addrinfo* address_info;
+	addrinfo hints;
+
+	ZeroMemory(&hints, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
+	hints.ai_flags = AI_PASSIVE;
+
+	// Resolve the local address and port to be used by the server
+	auto getaddrinfo_result = getaddrinfo(NULL, "13908", &hints, &address_info);
+
+	if (getaddrinfo_result != 0)
+	{
+		log_error("getaddrinfo failed");
+		/* WSACleanup(); */
+
+		return INVALID_SOCKET;
+	}
+
+	SOCKET sock = INVALID_SOCKET;
+
+	sock = socket(
+		address_info->ai_family,
+		address_info->ai_socktype,
+		address_info->ai_protocol
 	);
 
-	if (bind_result == -1)
+	if (sock == INVALID_SOCKET)
 	{
-		m_errors.push_back(
-			"[Error] Socket::bind() " + std::string{strerror(errno)}
-		);
+		log_error("Error at socket()");
+		freeaddrinfo(address_info);
+		/* WSACleanup(); */
+
+		return INVALID_SOCKET;
 	}
 
-	return *this;
-}
-
-static auto _listen = listen;
-Socket& Socket::listen(const size_t con_number)
-{
-	const auto listen_result = _listen(m_fd, con_number);
-
-	if (listen_result == -1)
-	{
-		m_errors.push_back(
-			"[Error] Socket::listen() " + std::string{strerror(errno)}
-		);
-	}
-
-	return *this;
-}
-
-static auto _accept = accept;
-Socket Socket::accept(sockaddr_in& address)
-{
-	auto address_length = sizeof(address);
-
-	return _accept(
-		m_fd,
-		reinterpret_cast<sockaddr *>(&address),
-		reinterpret_cast<socklen_t *>(&address_length)
+	// bind socket to ip address and port
+	auto bind_result = bind(
+		sock,
+		address_info->ai_addr,
+		(int)address_info->ai_addrlen
 	);
-}
 
-static const auto _read = read;
-Socket& Socket::read(void* buffer, size_t length)
-{
-	const auto read_result = _read(m_fd, buffer, length);
+    if (bind_result == SOCKET_ERROR)
+	{
+        log_error("bind failed with error");
+        freeaddrinfo(address_info);
+        closesocket(sock);
+        /* WSACleanup(); */
 
-	return *this;
-}
+		return INVALID_SOCKET;
+    }
 
-static const auto _send = send;
-Socket& Socket::send(const std::string_view& data)
-{
-	_send(m_fd, data.data(), data.length(), 0);
+	freeaddrinfo(address_info);
 
-	return *this;
-}
+	if (listen(sock, 64) == SOCKET_ERROR)
+	{
+		log_error( "Listen failed with error");
+		closesocket(sock);
+		/* WSACleanup(); */
 
-const std::vector<std::string>& Socket::errors()
-{
-	return m_errors;
+		return INVALID_SOCKET;
+	}
+
+	return sock;
 }

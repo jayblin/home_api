@@ -1,39 +1,15 @@
 #include <string_view>
-#include <vector>
-#include <sys/socket.h>
-#include <netinet/in.h>
 
-struct ConstructorArgs
-{
-	int domain;
-	int type;
-	int protocol;
-};
+#include <winsock2.h>
+#include <ws2tcpip.h>
 
-struct Option
-{
-	int level;
-	int name;
-	int value;
-};
+#ifndef SOCKET_H_
+#define SOCKET_H_
 
-class Socket
-{
-public:
-	Socket(ConstructorArgs);
-	Socket(int);
-	~Socket();
+void log_error(const std::string_view message);
 
-	auto set_option(Option) -> Socket&;
-	auto bind(sockaddr_in&) -> Socket&;
-	auto listen(const size_t con_number) -> Socket&;
-	auto read(void* buffer, size_t length) -> Socket&;
-	auto send(const std::string_view&) -> Socket&;
-	auto accept(sockaddr_in&) -> Socket;
-	auto errors() -> const std::vector<std::string>&;
+bool init_socket_lib();
 
-private:
-	int m_fd;
-	std::vector<std::string> m_errors;
-};
+SOCKET create_server_socket();
 
+#endif // SOCKET_H_
