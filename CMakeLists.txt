@@ -16,6 +16,13 @@ endif()
 
 set_property(TARGET culinary_api PROPERTY CXX_STANDARD 20)
 
+set(RAPIDJSON_BUILD_DOC OFF)
+set(RAPIDJSON_BUILD_EXAMPLES OFF)
+set(RAPIDJSON_BUILD_TESTS OFF)
+set(RAPIDJSON_BUILD_THIRDPARTY_GTEST OFF)
+
+add_subdirectory(vendor/rapidjson)
+
 configure_file(
 	${PROJECT_SOURCE_DIR}/include/local/config.h.in
 	${PROJECT_SOURCE_DIR}/include/local/config.h
@@ -25,4 +32,5 @@ target_include_directories(
 	culinary_api PUBLIC
 	${PROJECT_SOURCE_DIR}/include/local
 	${PROJECT_SOURCE_DIR}/include
+	${PROJECT_SOURCE_DIR}/vendor/rapidjson/include
 )
