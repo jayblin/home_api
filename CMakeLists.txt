@@ -4,10 +4,10 @@ project(culinary_api VERSION 0.0.1 LANGUAGES CXX)
 
 add_executable(
 	culinary_api
-	src/main.cpp
 	src/socket.cpp
-	src/response.cpp
 	src/request.cpp
+	src/route-map.cpp
+	src/main.cpp
 )
 
 if (WIN32)

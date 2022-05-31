@@ -11,15 +11,9 @@
  */
 struct Response
 {
-	HttpCode code;
-	std::string content;
-	std::string content_type;
+	const http::Code code;
+	const std::string content;
+	const std::string content_type;
 };
-
-namespace response
-{
-	auto status(const Response&) -> std::string;
-}
-
 
 #endif // RESPONSE_H_

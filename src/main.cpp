@@ -1,6 +1,7 @@
 #include "socket.hpp"
 #include "request.hpp"
 #include "response.hpp"
+#include "route-map.hpp"
 #include "utils.hpp"
 
 #include <iostream>
@@ -8,77 +9,33 @@
 #include <string>
 #include <unordered_map>
 #include <functional>
+#include <concepts>
 
-using RouteMap = std::unordered_map<
-	std::string,
-	Response (*)(Request&)
->;
-
-namespace api::ingredients
+struct Ingredient
 {
-	struct Ingredient
-	{
-		int id;
-		std::string title;
-	};
+	int id;
+	std::string title;
+};
 
-	struct GetRequest
-	{
-		int page = 1;
-		int id = -1;
-
-		GetRequest(Request& request)
-		{
-			/* request.query */
-		}
-	};
-
-	auto list() -> std::vector<Ingredient>
-	{
-		return {};
-	}
-
-	auto get(Request& request) -> Response
-	{
-		const auto req = GetRequest{request};
-
-		return {
-			.code=HttpCode::OK,
-			.content="[{\"title\": \"Соль\"}]",
-			.content_type="application/json; charset=UTF-8",
-		};
-	}
-}
-
-auto match_method_with_request(
-	Request& request,
-	RouteMap& map
-) -> Response
+struct GetRequest
 {
-	auto& path = request.path;
-	auto _i = 0;
-	auto i = 0;
+	int page = 1;
+	int id = -1;
 
-	while (i != std::string::npos && i < path.size() && _i < 100)
+	GetRequest(Request& request)
 	{
-		_i++;
-		const auto last_i = i;
-		i = path.find("/", i+1);
-
-		const auto route = path.substr(0, i);
-
-		const auto func = map[request.method + ":" + route];
-
-		if (func)
-		{
-			return func(request);
-		}
+		/* request.query */
 	}
+};
+
+auto list_ingredients(Request& request) -> Response
+{
+	const auto req = GetRequest{request};
 
 	return {
-		.code=HttpCode::NotFound,
-		.content="",
-		.content_type="text/html; charset=UTF-8",
+		.code = http::Code::OK,
+		.content = "[{\"title\": \"Соль\"}]",
+		.content_type = "application/json; charset=UTF-8",
 	};
 }
 
@@ -92,9 +49,8 @@ int main(int argument, char const* argv[])
 	auto sock = create_server_socket();
 
 	auto map = RouteMap{
-		{ "GET:/api/ingredients", &api::ingredients::get },
+		{ http::Method::GET, "/api/ingredients", &list_ingredients }
 	};
-
 
 	while (1)
 	{
@@ -114,11 +70,13 @@ int main(int argument, char const* argv[])
 
 		auto request = Request{buffer};
 
-		const auto response = match_method_with_request(request, map);
+		const auto response = map.match_method_with_request(request);
 
 		auto ss = std::stringstream{};
 
-		ss 	<< "HTTP/1.1 " << static_cast<int>(response.code) << " " << response::status(response) << "\n"
+		ss
+			<< "HTTP/1.1 " << static_cast<int>(response.code) << " "
+			<< http::code_to_str(response.code) << "\n"
 			<< "Content-type: " << response.content_type << "\n"
 			<< "\n"
 			<< response.content
