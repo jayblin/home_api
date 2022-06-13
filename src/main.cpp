@@ -94,6 +94,12 @@ int main(int argument, char const* argv[])
 			log_error("send failed");
 		}
 
+		const auto shutdown_result = shutdown(client_sock, SD_SEND);
+		if (shutdown_result == SOCKET_ERROR) {
+			log_error("shutdown failed");
+			closesocket(client_sock);
+		}
+
 		closesocket(client_sock);
 	}
 
