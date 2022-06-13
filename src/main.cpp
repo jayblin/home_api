@@ -64,7 +64,7 @@ int main(int argument, char const* argv[])
 		}
 
 		const size_t l = 1024 * 5;
-		char buffer[l];
+		char buffer[l] = "";
 
 		auto recv_result = recv(client_sock, buffer, l, 0);
 
