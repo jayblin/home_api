@@ -20,7 +20,7 @@ bool init_socket_lib()
 
 	if (wsa_started != 0)
 	{
-		CLOG("couldnt start WSA");
+		log_error("couldnt start WSA");
 
 		return false;
 	}
