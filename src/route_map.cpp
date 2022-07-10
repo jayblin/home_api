@@ -1,4 +1,5 @@
-#include "route-map.hpp"
+#include "route_map.hpp"
+#include "utils.hpp"
 
 #include <sstream>
 
@@ -10,13 +11,13 @@ RouteMap::RouteMap(std::initializer_list<RouteInitializer> list)
 		ss << http::method_to_str(item.method) << item.route;
 
 		m_map.insert_or_assign(
-			ss.view().data(),
+			ss.str(),
 			item.callback
 		);
 	}
 }
 
-Response RouteMap::match_method_with_request(http::Request& request)
+http::Response RouteMap::match_method_with_request(http::Request& request)
 {
 	const auto& path = request.path;
 	auto _i = 0;
@@ -34,6 +35,7 @@ Response RouteMap::match_method_with_request(http::Request& request)
 
 		const auto route = path.substr(0, i);
 
+		const auto key = request.method + route;
 		const auto func = m_map[request.method + route];
 
 		if (func)

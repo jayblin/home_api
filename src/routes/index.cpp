@@ -2,7 +2,7 @@
 
 #include "utils.hpp"
 
-auto routes::index(http::Request&) -> Response
+auto routes::index(http::Request&) -> http::Response
 {
 	return {
 		http::Code::OK,

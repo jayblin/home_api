@@ -1,12 +1,11 @@
-#include <string_view>
-#include <string>
-#include <unordered_map>
-#include <vector>
-#include "utils.hpp"
-#include "headers.hpp"
+#ifndef HTTP_REQUEST_H_
+#define HTTP_REQUEST_H_
 
-#ifndef REQUEST_H_
-#define REQUEST_H_
+#include "utils.hpp"
+
+#include "http/headers.hpp"
+
+#include <string>
 
 namespace http
 {
@@ -20,5 +19,4 @@ namespace http
 	};
 }
 
-#endif // REQUEST_H_
-
+#endif // HTTP_REQUEST_H_

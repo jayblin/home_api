@@ -5,7 +5,7 @@ project(culinary_api VERSION 0.0.1 LANGUAGES CXX)
 add_executable(
 	culinary_api
 	src/socket.cpp
-	src/route-map.cpp
+	src/route_map.cpp
 	src/main.cpp
 	src/utils.cpp
 	src/request_line_parser.cpp
