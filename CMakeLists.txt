@@ -11,6 +11,7 @@ add_executable(
 	src/request_line_parser.cpp
 	src/headers_parser.cpp
 	src/routes/index.cpp
+	src/routes/ingredients.cpp
 )
 
 if (WIN32)

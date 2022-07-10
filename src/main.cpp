@@ -4,6 +4,7 @@
 #include "request.hpp"
 #include "route-map.hpp"
 #include "routes/index.hpp"
+#include "routes/ingredients.hpp"
 
 #include <sstream>
 #include <string>
@@ -18,7 +19,16 @@ int main(int argument, char const* argv[])
 	auto sock = create_server_socket();
 
 	auto map = RouteMap{
-		{ http::Method::GET, "/api/ingredients", &list_ingredients }
+		{
+			http::Method::GET,
+			"/api/ingredients",
+			&routes::ingredients::list
+		},
+		{
+			http::Method::POST,
+			"/api/ingredients",
+			&routes::ingredients::post
+		},
 		{ http::Method::GET, "/", &routes::index }
 	};
 
