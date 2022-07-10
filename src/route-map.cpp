@@ -16,9 +16,9 @@ RouteMap::RouteMap(std::initializer_list<RouteInitializer> list)
 	}
 }
 
-Response RouteMap::match_method_with_request(Request& request)
+Response RouteMap::match_method_with_request(http::Request& request)
 {
-	auto& path = request.path;
+	const auto& path = request.path;
 	auto _i = 0;
 	auto i = 0;
 
@@ -42,9 +42,5 @@ Response RouteMap::match_method_with_request(Request& request)
 		}
 	}
 
-	return {
-		.code = http::Code::NotFound,
-		.content = "",
-		.content_type = "text/html; charset=UTF-8",
-	};
+	return { http::Code::NOT_FOUND };
 }

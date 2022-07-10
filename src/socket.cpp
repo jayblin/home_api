@@ -86,7 +86,7 @@ SOCKET create_server_socket()
 
 	freeaddrinfo(address_info);
 
-	if (listen(sock, 64) == SOCKET_ERROR)
+	if (listen(sock, 10) == SOCKET_ERROR)
 	{
 		log_error( "Listen failed with error");
 		closesocket(sock);
