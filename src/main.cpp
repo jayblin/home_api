@@ -1,3 +1,4 @@
+#include "config.h"
 #include "socket.hpp"
 #include "route_map.hpp"
 
@@ -6,11 +7,72 @@
 #include "http/request.hpp"
 
 #include "routes/index.hpp"
+#include "utils.hpp"
 
+#include <cstring>
+#include <fstream>
 #include <sstream>
 #include <string>
+#include <filesystem>
 
-int main(int argument, char const* argv[])
+/**
+ * If status of `response` is NOT_FOUND than this function will check if
+ * a file was requested and will return a filestream.
+ *
+ * @return std::ifstream Filestream of requested resource.
+ */
+std::ifstream try_get_file(
+	const http::Request& request,
+	http::Response& response
+)
+{
+	if (
+		http::Code::NOT_FOUND == response.code()
+		&& std::string::npos == request.path.find("..")
+	)
+	{
+		const auto p = std::filesystem::path(PUBLIC_DIR + request.path);
+		
+		if (std::filesystem::exists(p))
+		{
+			response.code(http::Code::OK);
+
+			if (0 == p.extension().compare(".ico"))
+			{
+				response.content_type(http::ContentType::IMG_X_ICON);
+			}
+			else if (0 == p.extension().compare(".jpg"))
+			{
+				response.content_type(http::ContentType::IMG_JPG);
+			}
+
+			return std::ifstream{p, std::ifstream::binary};
+		}
+	}
+
+	return std::ifstream{};
+}
+
+/**
+ * Tries to send a response through socket.
+ * Logs error on failure.
+ */
+void try_send(SOCKET& socket, const char* buff, const size_t count)
+{
+	auto send_result = send(
+		socket,
+		buff,
+		count,
+		0
+	);
+
+	if (send_result == SOCKET_ERROR)
+	{
+		log_error("send failed");
+	}
+}
+
+int main(int argc, char const* argv[])
 {
 	if (!init_socket_lib())
 	{
@@ -42,8 +104,6 @@ int main(int argument, char const* argv[])
 		memset(recv_buff, 0, MAX);
 
 		size_t n = 0;
-
-		auto finished = false;
 
 		http::RequestLineParser rl_parser;
 		http::HeadersParser h_parser;
@@ -92,30 +152,51 @@ int main(int argument, char const* argv[])
 		request.headers.host 			= std::move(h_parser.host);
 		request.body 					= std::move(body);
 
-		const auto response = map.match_method_with_request(request);
+		auto response = map.match_method_with_request(request);
+
+		auto requested_file = try_get_file(request, response);
 
 		auto ss = std::stringstream{};
 
 		ss
-			<< "HTTP/1.1 " << http::code_to_int(response.code) << " " << http::code_to_str(response.code) << "\n"
-			<< "Content-type: " << http::content_type_to_str(response.content_type) << "; charset=" << http::charset_to_str(response.charset) << "\n"
+			<< "HTTP/1.1 " << http::code_to_int(response.code()) << " " << http::code_to_str(response.code()) << "\n"
+			<< "Content-type: " << http::content_type_to_str(response.content_type()) << "; charset=" << http::charset_to_str(response.charset()) << "\n"
 			<< "\n"
-			<< response.content
 		;
 
-		const auto b = ss.str();
-
-		auto send_result = send(
+		try_send(
 			client_sock,
 			ss.view().data(),
-			ss.view().size(),
-			0
+			ss.view().size()
 		);
 
-		if (send_result == SOCKET_ERROR)
+		constexpr auto BODY_LEN = 1024 * 1024;
+		char buf[BODY_LEN];
+
+		if (response.content().length() > 0)
 		{
-			log_error("send failed");
+			try_send(
+				client_sock,
+				response.content().data(),
+				response.content().length()
+			);
 		}
+		else if (requested_file)
+		{
+			do
+			{
+				std::memset(buf, 0, BODY_LEN);
+
+				requested_file.read(buf, BODY_LEN - 1);
+
+				const auto count = requested_file.gcount();
+
+				try_send(client_sock, buf, count);
+			}
+			while (requested_file.good() && !requested_file.eof());
+		}
+
+		try_send(client_sock, "", 0);
 
 		const auto shutdown_result = shutdown(client_sock, SD_SEND);
 		if (shutdown_result == SOCKET_ERROR) {

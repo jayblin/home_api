@@ -6,6 +6,7 @@
 #include "http/response.hpp"
 
 #include <string>
+#include <unordered_map>
 
 struct RouteInitializer
 {
@@ -19,6 +20,10 @@ class RouteMap
 public:
 	RouteMap(std::initializer_list<RouteInitializer>);
 
+	/**
+	 * Based on request executes a function and returns a response of
+	 * that function.
+	 */
 	auto match_method_with_request(http::Request&) -> http::Response;
 
 private:

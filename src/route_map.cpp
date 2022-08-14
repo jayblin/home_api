@@ -20,8 +20,8 @@ RouteMap::RouteMap(std::initializer_list<RouteInitializer> list)
 http::Response RouteMap::match_method_with_request(http::Request& request)
 {
 	const auto& path = request.path;
-	auto _i = 0;
-	auto i = 0;
+	std::size_t _i = 0;
+	std::size_t i = 0;
 
 	while (
 		i != std::string::npos &&
@@ -30,7 +30,6 @@ http::Response RouteMap::match_method_with_request(http::Request& request)
 	)
 	{
 		_i++;
-		const auto last_i = i;
 		i = path.find("/", i+1);
 
 		const auto route = path.substr(0, i);
@@ -44,5 +43,5 @@ http::Response RouteMap::match_method_with_request(http::Request& request)
 		}
 	}
 
-	return { http::Code::NOT_FOUND };
+	return http::Response{}.code(http::Code::NOT_FOUND);
 }

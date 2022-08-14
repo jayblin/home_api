@@ -30,6 +30,9 @@ namespace http
 	{
 		APP_JSON,
 		TEXT_HTML,
+		IMG_PNG,
+		IMG_JPG,
+		IMG_X_ICON,
 	};
 
 	enum class Charset
@@ -76,6 +79,12 @@ namespace http
 				return "application/json";
 			case ContentType::TEXT_HTML:
 				return "text/html";
+			case ContentType::IMG_PNG:
+				return "image/png";
+			case ContentType::IMG_JPG:
+				return "image/jpg";
+			case ContentType::IMG_X_ICON:
+				return "image/x-icon";
 		}
 	}
 
