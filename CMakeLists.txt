@@ -32,10 +32,11 @@ configure_file(
 )
 
 target_include_directories(
-	culinary_api PUBLIC
-	${PROJECT_SOURCE_DIR}/include/local
-	${PROJECT_SOURCE_DIR}/include
-	${PROJECT_SOURCE_DIR}/vendor/rapidjson/include
+	culinary_api
+	PUBLIC
+		${PROJECT_SOURCE_DIR}/include/local
+		${PROJECT_SOURCE_DIR}/include
+)
 
 target_link_libraries(
 	culinary_api
