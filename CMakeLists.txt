@@ -14,7 +14,8 @@ add_executable(
 )
 
 if (WIN32)
-    target_link_libraries(culinary_api wsock32 ws2_32)
+	list(APPEND EXTRA_LIBS wsock32)
+	list(APPEND EXTRA_LIBS ws2_32)
 endif()
 
 set_property(TARGET culinary_api PROPERTY CXX_STANDARD 20)
@@ -40,6 +41,13 @@ target_include_directories(
 	${PROJECT_SOURCE_DIR}/include/local
 	${PROJECT_SOURCE_DIR}/include
 	${PROJECT_SOURCE_DIR}/vendor/rapidjson/include
+
+target_link_libraries(
+	culinary_api
+	PUBLIC
+		sql
+		${EXTRA_LIBS}
+)
 
 install(
 	TARGETS culinary_api
