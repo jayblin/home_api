@@ -26,6 +26,9 @@ set(RAPIDJSON_BUILD_THIRDPARTY_GTEST OFF)
 
 add_subdirectory(vendor/rapidjson)
 add_subdirectory(lib/sql)
+add_subdirectory(install)
+
+add_dependencies(culinary_api culinary_api_install)
 
 configure_file(
 	${PROJECT_SOURCE_DIR}/include/local/config.h.in
@@ -37,4 +40,8 @@ target_include_directories(
 	${PROJECT_SOURCE_DIR}/include/local
 	${PROJECT_SOURCE_DIR}/include
 	${PROJECT_SOURCE_DIR}/vendor/rapidjson/include
+
+install(
+	TARGETS culinary_api
+	RUNTIME DESTINATION bin
 )
