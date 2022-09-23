@@ -1,9 +1,4 @@
 #include "utils.hpp"
-
-#include "rapidjson/document.h"
-#include "rapidjson/writer.h"
-#include "rapidjson/stringbuffer.h"
-
 #include <filesystem>
 #include <fstream>
 
@@ -34,16 +29,6 @@ void log_as_hex(const char* buff, const size_t n)
 	}
 
 	std::cout << '\n';
-}
-
-auto json_doc_to_string(rapidjson::Document& doc) -> std::string
-{
-	rapidjson::StringBuffer buffer;
-	rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-
-	doc.Accept(writer);
-	
-	return buffer.GetString();
 }
 
 auto check_file_and_write_on_empty(

@@ -4,8 +4,6 @@
 #include <iostream>
 #include <sstream>
 
-#include "rapidjson/document.h"
-
 #define CLOG(x) std::cout << __FILE__ << ":" << __LINE__ << " " << x << "\n"
 
 #define YELLOW(x) "\x1B[33m" << x << "\033[0m"
@@ -99,8 +97,6 @@ namespace http
 }
 
 auto log_as_hex(const char* buff, const size_t n) -> void;
-
-auto json_doc_to_string(rapidjson::Document& doc) -> std::string;
 
 auto check_file_and_write_on_empty(
 	const std::string_view file_path,

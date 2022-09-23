@@ -20,12 +20,7 @@ endif()
 
 set_property(TARGET culinary_api PROPERTY CXX_STANDARD 20)
 
-set(RAPIDJSON_BUILD_DOC OFF)
-set(RAPIDJSON_BUILD_EXAMPLES OFF)
-set(RAPIDJSON_BUILD_TESTS OFF)
-set(RAPIDJSON_BUILD_THIRDPARTY_GTEST OFF)
 
-add_subdirectory(vendor/rapidjson)
 add_subdirectory(lib/sql)
 add_subdirectory(install)
 
