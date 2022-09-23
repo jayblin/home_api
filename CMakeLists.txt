@@ -25,6 +25,7 @@ set(RAPIDJSON_BUILD_TESTS OFF)
 set(RAPIDJSON_BUILD_THIRDPARTY_GTEST OFF)
 
 add_subdirectory(vendor/rapidjson)
+add_subdirectory(lib/sql)
 
 configure_file(
 	${PROJECT_SOURCE_DIR}/include/local/config.h.in
