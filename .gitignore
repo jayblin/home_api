@@ -4,3 +4,4 @@ compile_commands.json
 include/local/config.h
 CMakeFiles
 Session.vim
+tmp
