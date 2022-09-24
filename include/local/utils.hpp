@@ -94,13 +94,13 @@ namespace http
 				return "utf-8";
 		}
 	}
-}
+} // namespace http
 
 auto log_as_hex(const char* buff, const size_t n) -> void;
 
 auto check_file_and_write_on_empty(
-	const std::string_view file_path,
-	const std::string_view stub
+    const std::string_view file_path,
+    const std::string_view stub
 ) -> void;
 
 #endif // UTILS_H_

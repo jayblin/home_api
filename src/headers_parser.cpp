@@ -1,9 +1,7 @@
 #include "http/headers_parser.hpp"
 
-http::HeadersParser::State http::HeadersParser::parse(
-	const char* buffer,
-	const size_t cur_pos
-)
+http::HeadersParser::State
+    http::HeadersParser::parse(const char* buffer, const size_t cur_pos)
 {
 	if (m_key_start == -1)
 	{
@@ -35,15 +33,9 @@ http::HeadersParser::State http::HeadersParser::parse(
 	}
 	else if (m_state == State::VALUE_END)
 	{
-		const auto key = std::string(
-			buffer + m_key_start,
-			m_key_len
-		);
+		const auto key = std::string(buffer + m_key_start, m_key_len);
 
-		const auto value = std::string(
-			buffer + m_value_start,
-			m_value_len
-		);
+		const auto value = std::string(buffer + m_value_start, m_value_len);
 
 		if (key.compare("Host") == 0)
 		{
@@ -58,9 +50,8 @@ http::HeadersParser::State http::HeadersParser::parse(
 		m_key_start = cur_pos;
 	}
 
-	if (buffer[cur_pos-1] == '\r' && buffer[cur_pos] == '\n'
-		&& buffer[cur_pos-3] == '\r' && buffer[cur_pos - 2] == '\n'
-	)
+	if (buffer[cur_pos - 1] == '\r' && buffer[cur_pos] == '\n' &&
+	    buffer[cur_pos - 3] == '\r' && buffer[cur_pos - 2] == '\n')
 	{
 		m_state = State::END;
 	}

@@ -4,4 +4,4 @@
 namespace routes
 {
 	auto index(http::Request&) -> http::Response;
-}
+} // namespace routes

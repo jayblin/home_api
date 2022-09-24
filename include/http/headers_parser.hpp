@@ -19,18 +19,19 @@ namespace http
 		};
 
 		auto parse(const char* buffer, const size_t cur_pos) -> State;
+
 		auto is_finished() const -> bool { return m_state == State::END; }
 
 		std::string host;
-		size_t 		content_length = 0;
+		size_t content_length = 0;
 
 	private:
-		State 		m_state = State::START;
-		size_t 		m_key_start = -1;
-		size_t		m_key_len = -1;
-		size_t		m_value_start = -1;
-		size_t		m_value_len = -1;
+		State m_state = State::START;
+		size_t m_key_start = -1;
+		size_t m_key_len = -1;
+		size_t m_value_start = -1;
+		size_t m_value_len = -1;
 	};
-}
+} // namespace http
 
 #endif // HTTP_HEADER_PARSER_H_

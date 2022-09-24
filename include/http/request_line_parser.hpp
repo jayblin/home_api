@@ -21,6 +21,7 @@ namespace http
 		};
 
 		auto parse(const char* buffer, const size_t cur_pos) -> State;
+
 		auto is_finished() const -> bool { return m_state == State::FINISHED; }
 
 		std::string method;
@@ -35,6 +36,6 @@ namespace http
 		size_t m_path_end = 0;
 		size_t m_query_end = 0;
 	};
-}
+} // namespace http
 
 #endif // HTTP_REQUEST_LEINE_PARSER_H_

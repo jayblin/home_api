@@ -1,10 +1,8 @@
 #ifndef HTTP_REQUEST_H_
 #define HTTP_REQUEST_H_
 
-#include "utils.hpp"
-
 #include "http/headers.hpp"
-
+#include "utils.hpp"
 #include <string>
 
 namespace http
@@ -17,6 +15,6 @@ namespace http
 		std::string body;
 		http::Headers headers;
 	};
-}
+} // namespace http
 
 #endif // HTTP_REQUEST_H_

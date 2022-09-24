@@ -2,10 +2,8 @@
 #define SOCKET_H_
 
 #include <string_view>
-
 #include <winsock2.h>
 #include <ws2tcpip.h>
-
 
 void log_error(const std::string_view message);
 

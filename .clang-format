@@ -1,6 +1,6 @@
 ---
 Language:        Cpp
-AccessModifierOffset: -1
+AccessModifierOffset: -4
 AlignAfterOpenBracket: BlockIndent
 AlignArrayOfStructures: Right
 AlignConsecutiveMacros: None
@@ -180,7 +180,7 @@ SpacesInParentheses: false
 SpacesInSquareBrackets: false
 SpaceBeforeSquareBrackets: false
 BitFieldColonSpacing: After
-Standard:        Latest
+Standard:         c++20
 # StatementAttributeLikeMacros:
 #   - Q_EMIT
 # StatementMacros:

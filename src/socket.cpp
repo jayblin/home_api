@@ -1,6 +1,5 @@
 #include "socket.hpp"
 #include "utils.hpp"
-
 #include <string>
 #include <string_view>
 
@@ -14,8 +13,8 @@ bool init_socket_lib()
 	WSADATA wsa_data;
 
 	auto wsa_started = WSAStartup(
-		MAKEWORD(2,2), // use version 2.2 of Winsock
-		&wsa_data
+	    MAKEWORD(2, 2), // use version 2.2 of Winsock
+	    &wsa_data
 	);
 
 	if (wsa_started != 0)
@@ -53,9 +52,9 @@ SOCKET create_server_socket()
 	SOCKET sock = INVALID_SOCKET;
 
 	sock = socket(
-		address_info->ai_family,
-		address_info->ai_socktype,
-		address_info->ai_protocol
+	    address_info->ai_family,
+	    address_info->ai_socktype,
+	    address_info->ai_protocol
 	);
 
 	if (sock == INVALID_SOCKET)
@@ -68,27 +67,24 @@ SOCKET create_server_socket()
 	}
 
 	// bind socket to ip address and port
-	auto bind_result = bind(
-		sock,
-		address_info->ai_addr,
-		(int)address_info->ai_addrlen
-	);
+	auto bind_result =
+	    bind(sock, address_info->ai_addr, (int) address_info->ai_addrlen);
 
-    if (bind_result == SOCKET_ERROR)
+	if (bind_result == SOCKET_ERROR)
 	{
-        log_error("bind failed with error");
-        freeaddrinfo(address_info);
-        closesocket(sock);
-        /* WSACleanup(); */
+		log_error("bind failed with error");
+		freeaddrinfo(address_info);
+		closesocket(sock);
+		/* WSACleanup(); */
 
 		return INVALID_SOCKET;
-    }
+	}
 
 	freeaddrinfo(address_info);
 
 	if (listen(sock, 10) == SOCKET_ERROR)
 	{
-		log_error( "Listen failed with error");
+		log_error("Listen failed with error");
 		closesocket(sock);
 		/* WSACleanup(); */
 

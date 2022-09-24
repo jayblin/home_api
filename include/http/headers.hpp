@@ -10,6 +10,6 @@ namespace http
 		size_t content_length = 0;
 		std::string host = "";
 	};
-}
+} // namespace http
 
 #endif // HTTP_HEADERS_H_

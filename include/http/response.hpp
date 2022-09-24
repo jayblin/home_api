@@ -2,7 +2,6 @@
 #define RESPONSE_H_
 
 #include "utils.hpp"
-
 #include <cstring>
 #include <string>
 #include <string_view>
@@ -17,7 +16,8 @@ namespace http
 
 		/* const http::Code code = http::Code::OK; */
 		/* /1* const std::string content = ""; *1/ */
-		/* const http::ContentType content_type = http::ContentType::TEXT_HTML; */
+		/* const http::ContentType content_type = http::ContentType::TEXT_HTML;
+		 */
 		/* const http::Charset charset = http::Charset::UTF_8; */
 		/* const char content[BODY_BUFFER_SIZE]; */
 		auto code(http::Code value) -> Response&
@@ -25,22 +25,26 @@ namespace http
 			m_code = value;
 			return *this;
 		}
+
 		auto content_type(http::ContentType value) -> Response&
 		{
 			m_content_type = value;
 			return *this;
 		}
+
 		auto charset(http::Charset value) -> Response&
 		{
 			m_charset = value;
 			return *this;
 		}
+
 		/* auto content(std::string_view&& value) -> Response& */
 		auto content(std::string&& value) -> Response&
 		{
 			m_content = value;
 			return *this;
 		}
+
 		/* /1* auto content(const char* value) -> Response& *1/ */
 		/* { */
 		/* 	/1* this->m_content = value; *1/ */
@@ -53,8 +57,14 @@ namespace http
 		/* } */
 
 		auto code() const -> http::Code { return m_code; };
-		auto content_type() const -> http::ContentType { return m_content_type; };
+
+		auto content_type() const -> http::ContentType
+		{
+			return m_content_type;
+		};
+
 		auto charset() const -> http::Charset { return m_charset; };
+
 		/* auto content() const -> const char* { return m_content; }; */
 		auto content() const -> const std::string& { return m_content; };
 
@@ -121,6 +131,6 @@ namespace http
 		std::string m_content;
 		/* char m_content[BODY_BUFFER_SIZE]; */
 	};
-}
+} // namespace http
 
 #endif // RESPONSE_H_
