@@ -11,12 +11,14 @@ namespace http
 	class RequestParser
 	{
 	public:
-		auto parse(http::Request&, http::Parsor&) -> void;
+		RequestParser(http::Request& request): m_request(request) {};
+		auto parse(http::Parsor&) -> void;
 		auto is_finished() const -> bool;
 	private:
-		http::StatusLineParser m_slp;
-		http::HeadersParser m_hp;
-		std::stringstream m_stream;
+		http::Request& m_request;
+		http::StatusLineParser m_slp{};
+		http::HeadersParser m_hp{};
+		std::stringstream m_stream{};
 	};
 
 } // namespace http

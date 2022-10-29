@@ -3,27 +3,24 @@
 #include <string>
 #include <algorithm>
 
-void http::RequestParser::parse(
-	http::Request& request,
-	http::Parsor& parsor
-)
+void http::RequestParser::parse(http::Parsor& parsor)
 {
 	size_t iters = 0;
 	bool is_finished = false;
 
-	m_slp.parse(request, parsor);
-	m_hp.parse(request.headers, parsor);
+	m_slp.parse(m_request, parsor);
+	m_hp.parse(m_request.headers, parsor);
 
 	if (
-		request.headers.content_length > 0
-		&& m_stream.view().length() < request.headers.content_length
+		m_request.headers.content_length > 0
+		&& m_stream.view().length() < m_request.headers.content_length
 		&& !parsor.is_end()
 	)
 	{
 		const auto d = parsor.view().length() - parsor.cur_pos();
-		const auto len = request.headers.content_length > d ?
+		const auto len = m_request.headers.content_length > d ?
 			d :
-			request.headers.content_length
+			m_request.headers.content_length
 		;
 
 		m_stream << std::string(
@@ -36,10 +33,15 @@ void http::RequestParser::parse(
 	}
 
 	if (
-		request.headers.content_length > 0
-		&& m_stream.view().length() == request.headers.content_length
+		m_request.headers.content_length > 0
+		&& m_stream.view().length() == m_request.headers.content_length
 	)
 	{
-		request.body = std::move(m_stream.str());
+		m_request.body = std::move(m_stream.str());
 	}
+}
+
+bool http::RequestParser::is_finished() const
+{
+	return m_request.body.length() == m_request.headers.content_length;
 }

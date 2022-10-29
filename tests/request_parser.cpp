@@ -15,9 +15,9 @@ TEST(RequestParser, Literal)
 		"\r\n"
 	};
 	http::Request request;
-	http::RequestParser rp;
+	http::RequestParser rp{request};
 
-	rp.parse(request, parsor);
+	rp.parse(parsor);
 
 	EXPECT_STREQ("GET", request.method.data());
 	EXPECT_STREQ("/hello.txt", request.target.data());
@@ -26,6 +26,7 @@ TEST(RequestParser, Literal)
 	EXPECT_STREQ("www.example.com", request.headers.host.data());
 	EXPECT_EQ(0, request.headers.content_length);
 	EXPECT_STREQ("", request.body.data());
+	EXPECT_TRUE(rp.is_finished());
 }
 
 TEST(RequestParser, LiteralPost)
@@ -38,15 +39,16 @@ TEST(RequestParser, LiteralPost)
 		"Some body"
 	};
 	http::Request request;
-	http::RequestParser rp;
+	http::RequestParser rp{request};
 
-	rp.parse(request, parsor);
+	rp.parse(parsor);
 
 	EXPECT_STREQ("POST", request.method.data());
 	EXPECT_STREQ("/hello.txt", request.target.data());
 	EXPECT_EQ(1, request.http_version);
 	EXPECT_EQ(9, request.headers.content_length);
 	EXPECT_STREQ("Some body", request.body.data());
+	EXPECT_TRUE(rp.is_finished());
 }
 
 TEST(RequestParser, LiteralPostLineBreaks)
@@ -61,15 +63,16 @@ TEST(RequestParser, LiteralPostLineBreaks)
 		"My life got flipped, turned upside down\r"
 	};
 	http::Request request;
-	http::RequestParser rp;
+	http::RequestParser rp{request};
 
-	rp.parse(request, parsor);
+	rp.parse(parsor);
 
 	EXPECT_STREQ("POST", request.method.data());
 	EXPECT_STREQ("/hello.txt", request.target.data());
 	EXPECT_EQ(1, request.http_version);
 	EXPECT_EQ(77, request.headers.content_length);
 	EXPECT_STREQ("Now this is the story\r\nAll about how\nMy life got flipped, turned upside down\r", request.body.data());
+	EXPECT_TRUE(rp.is_finished());
 }
 
 TEST(RequestParser, MultipleReceives)
@@ -81,38 +84,42 @@ TEST(RequestParser, MultipleReceives)
 		"\r\n"
 	};
 	http::Request request;
-	http::RequestParser rp;
+	http::RequestParser rp{request};
 
-	rp.parse(request, parsor1);
+	rp.parse(parsor1);
 
 	EXPECT_STREQ("POST", request.method.data());
 	EXPECT_STREQ("/hello.txt", request.target.data());
 	EXPECT_EQ(1, request.http_version);
 	EXPECT_EQ(77, request.headers.content_length);
 	EXPECT_STREQ("", request.body.data());
+	EXPECT_FALSE(rp.is_finished());
 
 	http::Parsor parsor2{
 		"Now this is the story\r\n"
 	};
 
-	rp.parse(request, parsor2);
+	rp.parse(parsor2);
 
 	EXPECT_STREQ("", request.body.data());
+	EXPECT_FALSE(rp.is_finished());
 
 	http::Parsor parsor3{
 		"All about how\n"
 		"My life go"
 	};
 
-	rp.parse(request, parsor3);
+	rp.parse(parsor3);
 
 	EXPECT_STREQ("", request.body.data());
+	EXPECT_FALSE(rp.is_finished());
 
 	http::Parsor parsor4{
 		"t flipped, turned upside down\r"
 	};
 
-	rp.parse(request, parsor4);
+	rp.parse(parsor4);
 
 	EXPECT_STREQ("Now this is the story\r\nAll about how\nMy life got flipped, turned upside down\r", request.body.data());
+	EXPECT_TRUE(rp.is_finished());
 }
