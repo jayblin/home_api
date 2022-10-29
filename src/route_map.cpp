@@ -15,7 +15,7 @@ RouteMap::RouteMap(std::initializer_list<RouteInitializer> list)
 
 http::Response RouteMap::match_method_with_request(http::Request& request)
 {
-	const auto& path = request.path;
+	const auto& path = request.target;
 	std::size_t _i = 0;
 	std::size_t i = 0;
 

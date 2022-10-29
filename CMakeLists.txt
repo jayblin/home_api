@@ -8,9 +8,11 @@ add_executable(
 	src/route_map.cpp
 	src/main.cpp
 	src/utils.cpp
-	src/request_line_parser.cpp
+	src/status_line_parser.cpp
 	src/headers_parser.cpp
 	src/routes/index.cpp
+	src/request_parser.cpp
+	src/parsor.cpp
 )
 
 if (WIN32)
@@ -19,7 +21,6 @@ if (WIN32)
 endif()
 
 set_property(TARGET culinary_api PROPERTY CXX_STANDARD 20)
-
 
 add_subdirectory(lib/sql)
 add_subdirectory(install)

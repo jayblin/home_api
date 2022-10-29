@@ -1,7 +1,7 @@
 #include "config.h"
 #include "http/headers_parser.hpp"
 #include "http/request.hpp"
-#include "http/request_line_parser.hpp"
+#include "http/request_parser.hpp"
 #include "route_map.hpp"
 #include "routes/index.hpp"
 #include "socket.hpp"
@@ -22,9 +22,9 @@ std::ifstream
     try_get_file(const http::Request& request, http::Response& response)
 {
 	if (http::Code::NOT_FOUND == response.code() &&
-	    std::string::npos == request.path.find(".."))
+	    std::string::npos == request.target.find(".."))
 	{
-		const auto p = std::filesystem::path(PUBLIC_DIR + request.path);
+		const auto p = std::filesystem::path(PUBLIC_DIR + request.target);
 
 		if (std::filesystem::exists(p))
 		{
@@ -70,7 +70,9 @@ int main(int argc, char const* argv[])
 	auto sock = create_server_socket();
 
 	auto map = RouteMap {
-	    {http::Method::GET, "/", &routes::index}
+	    {http::Method::GET, "/", &routes::index},
+		{http::Method::GET, "/api/recipes", &routes::get_recipes},
+		{http::Method::POST, "/api/recipes", &routes::post_recipes},
     };
 
 	constexpr auto MAX = 1024 * 10;
@@ -93,50 +95,23 @@ int main(int argc, char const* argv[])
 
 		size_t n = 0;
 
-		http::RequestLineParser rl_parser;
-		http::HeadersParser h_parser;
-		std::string body = "";
+		http::Request request;
+		http::RequestParser parser{request};
 
 		// MAX - 1, because 0 terminates string, and so i dont have to manualy
 		// set last char to 0.
 		while ((n = recv(client_sock, recv_buff, MAX - 1, 0)) > 0)
 		{
-			if (!h_parser.is_finished())
-			{
-				for (size_t i = 0; i < n; i++)
-				{
-					if (!rl_parser.is_finished())
-					{
-						rl_parser.parse(recv_buff, i);
-					}
-					else if (!h_parser.is_finished())
-					{
-						h_parser.parse(recv_buff, i);
-					}
-				}
-			}
-			else if (h_parser.content_length > 0)
-			{
-				body += std::string(recv_buff, n);
-			}
+			http::Parsor parsor{recv_buff};
+			parser.parse(parsor);
 
 			memset(recv_buff, 0, MAX);
 
-			if ((h_parser.is_finished() && h_parser.content_length == 0) ||
-			    (body.length() >= h_parser.content_length))
+			if (parser.is_finished())
 			{
 				break;
 			}
 		}
-
-		http::Request request;
-
-		request.method = std::move(rl_parser.method);
-		request.path = std::move(rl_parser.path);
-		request.query = std::move(rl_parser.query);
-		request.headers.content_length = h_parser.content_length;
-		request.headers.host = std::move(h_parser.host);
-		request.body = std::move(body);
 
 		auto response = map.match_method_with_request(request);
 
