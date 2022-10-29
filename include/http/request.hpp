@@ -10,8 +10,9 @@ namespace http
 	struct Request
 	{
 		std::string method;
-		std::string path;
+		std::string target;
 		std::string query;
+		int http_version;
 		std::string body;
 		http::Headers headers;
 	};

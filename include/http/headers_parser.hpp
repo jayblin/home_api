@@ -1,7 +1,8 @@
 #ifndef HTTP_HEADER_PARSER_H_
 #define HTTP_HEADER_PARSER_H_
 
-#include <string>
+#include "http/headers.hpp"
+#include "http/parsor.hpp"
 
 namespace http
 {
@@ -18,12 +19,9 @@ namespace http
 			END
 		};
 
-		auto parse(const char* buffer, const size_t cur_pos) -> State;
+		auto parse(http::Headers&, http::Parsor&) -> State;
 
 		auto is_finished() const -> bool { return m_state == State::END; }
-
-		std::string host;
-		size_t content_length = 0;
 
 	private:
 		State m_state = State::START;
