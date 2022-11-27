@@ -4,13 +4,16 @@
 #include "http/request_parser.hpp"
 #include "route_map.hpp"
 #include "routes/index.hpp"
-#include "socket.hpp"
+#include "sock/buffer.hpp"
+#include "sock/socket_factory.hpp"
+#include "sock/utils.hpp"
 #include "utils.hpp"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <string_view>
 
 /**
  * If status of `response` is NOT_FOUND than this function will check if
@@ -46,125 +49,113 @@ std::ifstream
 	return std::ifstream {};
 }
 
-/**
- * Tries to send a response through socket.
- * Logs error on failure.
- */
-void try_send(SOCKET& socket, const char* buff, const size_t count)
-{
-	auto send_result = send(socket, buff, count, 0);
-
-	if (send_result == SOCKET_ERROR)
-	{
-		log_error("send failed");
-	}
-}
-
 int main(int argc, char const* argv[])
 {
-	if (!init_socket_lib())
+	auto& factory = sock::SocketFactory::instance();
+
 	{
-		return 1;
-	}
+		auto server_sock = factory
+			.wrap({
+				.domain = sock::Domain::INET,
+				.type = sock::Type::STREAM,
+				.protocol = sock::Protocol::TCP,
+				.port = "13908",
+				.flags = sock::Flags::PASSIVE,
+			})
+			.with([](auto& sock) {
+				if (sock.status() != sock::Status::GOOD)
+				{
+					sock::log_error(
+						std::string{"Server error "}
+						+ std::string{sock::str_status(sock.status())}
+					);
+				}
+			})
+			.create()
+		;
+		server_sock
+			.option(sock::Option::REUSEADDR, 1)
+			.bind()
+			.listen(10)
+		;
 
-	auto sock = create_server_socket();
+		auto map = RouteMap {
+			{http::Method::GET, "/", &routes::index},
+			/* {http::Method::GET, "/api/recipes", &routes::get_recipes}, */
+			/* {http::Method::POST, "/api/recipes", &routes::post_recipes}, */
+		};
 
-	auto map = RouteMap {
-	    {http::Method::GET, "/", &routes::index},
-		{http::Method::GET, "/api/recipes", &routes::get_recipes},
-		{http::Method::POST, "/api/recipes", &routes::post_recipes},
-    };
+		constexpr auto MAX = 1024 * 10;
+		static_assert(MAX >= 1024);
 
-	constexpr auto MAX = 1024 * 10;
-	static_assert(MAX >= 1024);
-
-	char recv_buff[MAX];
-
-	while (1)
-	{
-		auto client_sock = accept(sock, NULL, NULL);
-
-		if (client_sock == INVALID_SOCKET)
+		while (1)
 		{
-			log_error("accept failed");
-			closesocket(client_sock);
-			continue;
-		}
+			auto connection = server_sock.accept();
+			http::Request request;
+			http::RequestParser parser{request};
+			sock::Buffer buffer;
 
-		memset(recv_buff, 0, MAX);
-
-		size_t n = 0;
-
-		http::Request request;
-		http::RequestParser parser{request};
-
-		// MAX - 1, because 0 terminates string, and so i dont have to manualy
-		// set last char to 0.
-		while ((n = recv(client_sock, recv_buff, MAX - 1, 0)) > 0)
-		{
-			http::Parsor parsor{recv_buff};
-			parser.parse(parsor);
-
-			memset(recv_buff, 0, MAX);
-
-			if (parser.is_finished())
-			{
-				break;
-			}
-		}
-
-		auto response = map.match_method_with_request(request);
-
-		auto requested_file = try_get_file(request, response);
-
-		auto ss = std::stringstream {};
-
-		ss << "HTTP/1.1 " << http::code_to_int(response.code()) << " "
-		   << http::code_to_str(response.code()) << "\n"
-		   << "Content-type: "
-		   << http::content_type_to_str(response.content_type())
-		   << "; charset=" << http::charset_to_str(response.charset()) << "\n"
-		   << "\n";
-
-		try_send(client_sock, ss.view().data(), ss.view().size());
-
-		constexpr auto BODY_LEN = 1024 * 1024;
-		char buf[BODY_LEN];
-
-		if (response.content().length() > 0)
-		{
-			try_send(
-			    client_sock,
-			    response.content().data(),
-			    response.content().length()
-			);
-		}
-		else if (requested_file)
-		{
 			do
 			{
-				std::memset(buf, 0, BODY_LEN);
+				connection.receive(buffer);
 
-				requested_file.read(buf, BODY_LEN - 1);
+				http::Parsor parsor{buffer.buffer()};
+				parser.parse(parsor);
 
-				const auto count = requested_file.gcount();
+				if (parser.is_finished())
+				{
+					break;
+				}
+			}
+			while (buffer.received_size() > 0);
 
-				try_send(client_sock, buf, count);
-			} while (requested_file.good() && !requested_file.eof());
+			auto response = map.match_method_with_request(request);
+
+			auto requested_file = try_get_file(request, response);
+
+			auto ss = std::stringstream {};
+
+			ss << "HTTP/1.1 " << http::code_to_int(response.code()) << " "
+			   << http::code_to_str(response.code()) << "\n"
+			   << "Content-type: "
+			   << http::content_type_to_str(response.content_type())
+			   << "; charset=" << http::charset_to_str(response.charset()) << "\n"
+			   << "\n";
+
+			connection.send(ss.view());
+
+			if (response.content().length() > 0)
+			{
+				connection.send(response.content());
+			}
+			else if (requested_file)
+			{
+				constexpr auto BODY_LEN = 1024 * 1024;
+				char buf[BODY_LEN];
+
+				do
+				{
+					std::memset(buf, 0, BODY_LEN);
+
+					requested_file.read(buf, BODY_LEN - 1);
+
+					const auto count = requested_file.gcount();
+
+					if (count > 0)
+					{
+						connection.send(std::string_view{
+							buf,
+							static_cast<std::string_view::size_type>(count)
+					});
+					}
+				} while (requested_file.good() && !requested_file.eof());
+			}
+
+			connection.send("");
+
+			connection.shutdown();
 		}
-
-		try_send(client_sock, "", 0);
-
-		const auto shutdown_result = shutdown(client_sock, SD_SEND);
-		if (shutdown_result == SOCKET_ERROR)
-		{
-			log_error("shutdown failed");
-		}
-
-		closesocket(client_sock);
 	}
 
-	closesocket(sock);
-
-	WSACleanup();
+	return 0;
 }

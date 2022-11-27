@@ -4,7 +4,6 @@ project(culinary_api VERSION 0.0.1 LANGUAGES CXX)
 
 add_executable(
 	culinary_api
-	src/socket.cpp
 	src/route_map.cpp
 	src/main.cpp
 	src/utils.cpp
@@ -14,11 +13,6 @@ add_executable(
 	src/request_parser.cpp
 	src/parsor.cpp
 )
-
-if (WIN32)
-	list(APPEND EXTRA_LIBS wsock32)
-	list(APPEND EXTRA_LIBS ws2_32)
-endif()
 
 set_property(TARGET culinary_api PROPERTY CXX_STANDARD 20)
 
@@ -43,12 +37,7 @@ target_link_libraries(
 	culinary_api
 	PUBLIC
 		sql
-		${EXTRA_LIBS}
-)
-
-install(
-	TARGETS culinary_api
-	RUNTIME DESTINATION bin
+		sock
 )
 
 # GoogleTest
@@ -101,3 +90,15 @@ include(GoogleTest)
 gtest_discover_tests(tests_executable)
 
 #~GoogleTest
+
+FetchContent_Declare(
+  sock
+  GIT_REPOSITORY https://github.com/jayblin/sock.git
+  GIT_TAG        9d3c63509259adc37c37bbc3e1b6862f1a48a29b
+)
+FetchContent_MakeAvailable(sock)
+
+install(
+	TARGETS culinary_api sock
+	RUNTIME DESTINATION bin
+)
