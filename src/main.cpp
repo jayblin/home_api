@@ -98,8 +98,6 @@ int main(int argc, char const* argv[])
 			do
 			{
 				connection.receive(buffer);
-				CLOG(buffer.received_size());
-				CLOG(buffer.buffer());
 
 				http::Parsor parsor{buffer.buffer()};
 				parser.parse(parsor);
