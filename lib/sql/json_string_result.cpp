@@ -1,17 +1,30 @@
 #include "sql/json_string_result.hpp"
+#include "sql/forward.hpp"
 
 static bool is_numeric(const std::string_view& value)
 {
 	const auto it = std::find_if(
 	    value.begin(),
 	    value.end(),
-	    [](char const& c) { return !std::isdigit(c); }
+	    [](char const& c) { return !std::isdigit(c) && c != '.'; }
 	);
 
 	return it == value.end();
 }
 
-int JsonStringResult::callback(
+static bool is_json_array(const std::string_view& value)
+{
+	return value[0] == '[' && value[value.length() - 1] == ']';
+}
+
+static bool should_be_quoted(const std::string_view& value)
+{
+	return !(value.length() > 0
+		&& (is_numeric(value) || is_json_array(value)))
+	;
+}
+
+int sql::JsonStringResult::callback(
     void* obj,
     int argc,
     char** argv,
@@ -21,7 +34,14 @@ int JsonStringResult::callback(
 	int i;
 	const auto stream = &static_cast<JsonStringResult*>(obj)->m_stream;
 
-	*stream << "{";
+	if (stream->rdbuf()->in_avail() > 0)
+	{
+		*stream << "},{";
+	}
+	else
+	{
+		*stream << "{";
+	}
 
 	for (i = 0; i < argc; i++)
 	{
@@ -31,13 +51,13 @@ int JsonStringResult::callback(
 		{
 			const auto value = std::string_view {argv[i]};
 
-			if (value.length() > 0 && is_numeric(value))
+			if (should_be_quoted(value))
 			{
-				*stream << value;
+				*stream << '\"' << value << '\"';
 			}
 			else
 			{
-				*stream << '\"' << value << '\"';
+				*stream << value;
 			}
 
 			if (i + 1 < argc)
@@ -51,13 +71,21 @@ int JsonStringResult::callback(
 		}
 	}
 
-	*stream << "},";
-
 	return 0;
 }
 
-std::string JsonStringResult::get_array_result()
+void sql::JsonStringResult::close_braces_if_needed()
 {
+	if (m_stream.view().starts_with('{') && !m_stream.view().ends_with('}'))
+	{
+		m_stream << "}";
+	}
+}
+
+std::string sql::JsonStringResult::get_array_result()
+{
+	close_braces_if_needed();
+
 	m_stream << "]";
 	std::stringstream tmp;
 	tmp << "[";
@@ -66,4 +94,48 @@ std::string JsonStringResult::get_array_result()
 	m_stream = std::move(tmp);
 
 	return m_stream.str();
+}
+
+std::string sql::JsonStringResult::get_object_result()
+{
+	close_braces_if_needed();
+
+	return m_stream.str();
+}
+
+void sql::JsonStringResult::row(int column_count)
+{
+	if (m_stream.rdbuf()->in_avail() > 0)
+	{
+		m_stream << "},{";
+	}
+	else
+	{
+		m_stream << "{";
+	}
+}
+
+void sql::JsonStringResult::column(
+	std::string_view name, sql::Type type, std::string_view value
+)
+{
+	if (!m_stream.view().ends_with('{'))
+	{
+		m_stream << ',';
+	}
+
+	m_stream << '"' << name << "\":";
+
+	if (sql::Type::SQL_NULL == type)
+	{
+		m_stream << "null";
+	}
+	else if (should_be_quoted(value))
+	{
+		m_stream << '\"' << value << '\"';
+	}
+	else
+	{
+		m_stream << value;
+	}
 }

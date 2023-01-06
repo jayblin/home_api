@@ -7,6 +7,8 @@ add_library(
 	SHARED
 		${CMAKE_SOURCE_DIR}/vendor/sqlite/sqlite3.c
 		sqlite3.cpp
+		statement.cpp
+		status.cpp
 		json_string_result.cpp
 )
 
