@@ -5,13 +5,15 @@ project(culinary_api VERSION 0.0.1 LANGUAGES CXX)
 add_executable(
 	culinary_api
 	src/route_map.cpp
-	src/main.cpp
 	src/utils.cpp
 	src/status_line_parser.cpp
 	src/headers_parser.cpp
-	src/routes/index.cpp
 	src/request_parser.cpp
 	src/parsor.cpp
+	src/tables/definitions.cpp
+	src/tables/utils.cpp
+	src/routes/index.cpp
+	src/main.cpp
 )
 
 set_property(TARGET culinary_api PROPERTY CXX_STANDARD 20)
@@ -35,9 +37,10 @@ target_include_directories(
 
 target_link_libraries(
 	culinary_api
-	PUBLIC
+	PRIVATE
 		sql
 		sock
+		nlohmann_json::nlohmann_json
 )
 
 # GoogleTest
@@ -96,7 +99,10 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/jayblin/sock.git
   GIT_TAG        9d3c63509259adc37c37bbc3e1b6862f1a48a29b
 )
-FetchContent_MakeAvailable(sock)
+
+FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.2/json.tar.xz)
+
+FetchContent_MakeAvailable(sock json)
 
 install(
 	TARGETS culinary_api sock

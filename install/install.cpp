@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string>
 #include "config.h"
+#include "sql/status.hpp"
 
 static int table_exists(
 	void* obj,
@@ -45,7 +46,7 @@ static int fill_executed_migrations_vector(
 
 static void print_sql_error(const sql::Sqlite3& db)
 {
-	std::cout << "(" << status_str(db.status()) << ") " << db.message() << "\n";
+	std::cout << "(" << sql::status::view(db) << ") " << db.message() << "\n";
 }
 
 static bool check_meta_table_exists(sql::Sqlite3& db)
@@ -69,7 +70,7 @@ static std::vector<std::string> get_executed_migrations(sql::Sqlite3& db)
 	std::vector<std::string> result;
 	const auto meta_table_exists = check_meta_table_exists(db);
 
-	if (!meta_table_exists || db.status() != sql::Sqlite3::Status::OK)
+	if (!meta_table_exists || !sql::status::is_ok(db))
 	{
 		return result;
 	}
@@ -125,7 +126,7 @@ int main()
 
 	std::cout << "A total of " << executed_migrations.size() << " migrations found\n";
 
-	if (db.status() != sql::Sqlite3::Status::OK)
+	if (!sql::status::is_ok(db))
 	{
 		print_sql_error(db);
 		return 1;
@@ -148,7 +149,7 @@ int main()
 		std::cout << "migrating " << entry.path() << "\n";
 		execute_migration(db, entry);
 
-		if (db.status() != sql::Sqlite3::Status::OK)
+		if (!sql::status::is_ok(db))
 		{
 			print_sql_error(db);
 			db.exec(
@@ -166,7 +167,7 @@ int main()
 		std::cout << "logging migration " << entry.path().filename().string() << "\n";
 		log_migration(db, entry);
 
-		if (db.status() != sql::Sqlite3::Status::OK)
+		if (!sql::status::is_ok(db))
 		{
 			print_sql_error(db);
 			db.exec(

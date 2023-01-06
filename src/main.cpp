@@ -79,14 +79,7 @@ int main(int argc, char const* argv[])
 			.listen(10)
 		;
 
-		auto map = RouteMap {
-			{http::Method::GET, "/", &routes::index},
-			/* {http::Method::GET, "/api/recipes", &routes::get_recipes}, */
-			/* {http::Method::POST, "/api/recipes", &routes::post_recipes}, */
-		};
-
-		constexpr auto MAX = 1024 * 10;
-		static_assert(MAX >= 1024);
+		auto& map = RouteMap::instance();
 
 		while (1)
 		{
@@ -101,13 +94,8 @@ int main(int argc, char const* argv[])
 
 				http::Parsor parsor{buffer.buffer()};
 				parser.parse(parsor);
-
-				if (parser.is_finished())
-				{
-					break;
-				}
 			}
-			while (buffer.received_size() > 0);
+			while (buffer.received_size() > 0 && !parser.is_finished());
 
 			auto response = map.match_method_with_request(request);
 
@@ -146,7 +134,7 @@ int main(int argc, char const* argv[])
 						connection.send(std::string_view{
 							buf,
 							static_cast<std::string_view::size_type>(count)
-					});
+						});
 					}
 				} while (requested_file.good() && !requested_file.eof());
 			}

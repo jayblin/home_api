@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS food (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	title TEXT NOT NULL,
+	title TEXT NOT NULL UNIQUE,
 	calories REAL,
 	proteins REAL,
 	carbohydrates REAL,
