@@ -108,3 +108,8 @@ install(
 	TARGETS culinary_api sock
 	RUNTIME DESTINATION bin
 )
+
+configure_file(
+	${PROJECT_SOURCE_DIR}/include/local/cmake_vars.h.in
+	${PROJECT_SOURCE_DIR}/include/local/cmake_vars.h
+)
