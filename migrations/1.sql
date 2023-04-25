@@ -5,4 +5,4 @@ CREATE TABLE IF NOT EXISTS food (
 	proteins REAL,
 	carbohydrates REAL,
 	fats REAL
-);
+) STRICT;

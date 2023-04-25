@@ -1,7 +1,7 @@
-CREATE TABLE IF NOT EXISTS food_creation_log (
-	food_id INTEGER,
+CREATE TABLE IF NOT EXISTS user_food_log (
 	user_id INTEGER,
-	created_at_stamp TEXT,
+	food_id INTEGER,
+	created_at TEXT,
 	FOREIGN KEY (user_id) REFERENCES user(id),
 	FOREIGN KEY (food_id) REFERENCES food(id)
-);
+) STRICT;
