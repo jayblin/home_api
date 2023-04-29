@@ -2,8 +2,8 @@
 #define HTTP_PARSOR_H_
 
 #include <string_view>
-#include <utility>
-#include <algorithm>
+/* #include <utility> */
+/* #include <algorithm> */
 
 namespace http
 {
@@ -13,12 +13,14 @@ namespace http
 	class Parsor
 	{
 	public:
-		Parsor(std::string_view str) : m_str(str), m_cur_pos(m_str.length() > 0 ? 0 : -1) {};
+		Parsor(std::string_view str) :
+			m_str(str),
+			m_cur_pos(m_str.length() > 0 ? 0 : -1) {};
 
 		/**
 		 * Return currently parsed character.
 		 */
-		auto cur_char() const -> const char { return m_str[m_cur_pos]; };
+		auto cur_char() const -> char { return m_str[m_cur_pos]; };
 
 		/**
 		 * Returns index of currently parsed character.

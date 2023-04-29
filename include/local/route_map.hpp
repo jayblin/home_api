@@ -3,7 +3,6 @@
 
 #include "http/request.hpp"
 #include "http/response.hpp"
-#include "utils.hpp"
 #include <functional>
 #include <string>
 #include <unordered_map>
@@ -29,21 +28,26 @@ public:
 	 * Based on request executes a function and returns a response of
 	 * that function.
 	 */
-	auto match_method_with_request(http::Request&) -> http::Response;
-	auto add(std::function<http::Response (http::Request&)>) -> RouteMap&;
-	auto add(
-		http::Method method,
-		std::string route,
-		std::function<http::Response (http::Request&)> callback
-	) -> RouteMap&;
+	auto match_method_with_request(http::Request&) const -> http::Response;
+	/* auto add(std::function<http::Response(http::Request&)>) -> RouteMap&; */
+	auto
+	    add(http::Method method,
+	        std::string route,
+	        std::function<http::Response(http::Request&)> callback)
+	        -> RouteMap&;
+	/* auto */
+	/*     add(http::Method method, */
+	/*         std::string route, */
+	/*         std::function<http::Response(http::Request&)> callback) */
+	/*         -> RouteMap&; */
 
 private:
 	RouteMap();
 	RouteMap(const RouteMap&);
 	RouteMap& operator=(const RouteMap&);
 
-	/* std::unordered_map<std::string, http::Response (*)(http::Request&)> m_map; */
-	std::unordered_map<std::string, std::function<http::Response (http::Request&)>> m_map;
+	std::unordered_map<std::string, std::function<http::Response(http::Request&)>>
+	    m_map;
 };
 
 #endif // LOCAL_ROUTE_MAP_H_

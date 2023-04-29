@@ -1,113 +1,167 @@
 cmake_minimum_required(VERSION 3.23)
 
-project(culinary_api VERSION 0.0.1 LANGUAGES CXX)
+project(home_api VERSION 0.0.1 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(
+	GCC_COMPILER_FLAGS
+	"-g;-Wall;-Wextra;-Wshadow;-Wformat=2;-Wunused"
+)
 
 add_executable(
-	culinary_api
+	home_api
 	src/route_map.cpp
-	src/utils.cpp
-	src/status_line_parser.cpp
-	src/headers_parser.cpp
-	src/request_parser.cpp
-	src/parsor.cpp
-	src/tables/definitions.cpp
-	src/tables/utils.cpp
+	# src/local/utils.cpp
+	src/http/status_line_parser.cpp
+	src/http/headers_parser.cpp
+	src/http/request_parser.cpp
+	src/http/parsor.cpp
+	src/http/query_parser.cpp
 	src/routes/index.cpp
 	src/main.cpp
 )
 
-set_property(TARGET culinary_api PROPERTY CXX_STANDARD 20)
-
-add_subdirectory(lib/sql)
-add_subdirectory(install)
-
-add_dependencies(culinary_api culinary_api_install)
-
-configure_file(
-	${PROJECT_SOURCE_DIR}/include/local/config.h.in
-	${PROJECT_SOURCE_DIR}/include/local/config.h
-)
-
 target_include_directories(
-	culinary_api
+	home_api
 	PUBLIC
-		${PROJECT_SOURCE_DIR}/include/local
-		${PROJECT_SOURCE_DIR}/include
+		include
 )
 
-target_link_libraries(
-	culinary_api
-	PRIVATE
-		sql
-		sock
-		nlohmann_json::nlohmann_json
-)
-
-# GoogleTest
-
-# https://google.github.io/googletest/quickstart-cmake.html
 include(FetchContent)
+
 FetchContent_Declare(
 	googletest
 	GIT_REPOSITORY https://github.com/google/googletest.git
 	GIT_TAG release-1.12.1
 )
 
+FetchContent_Declare(
+	sock
+	GIT_REPOSITORY 	https://github.com/jayblin/sock.git
+	GIT_TAG 		7dd5b5f9b239c877dca3bb349350fdfb4b5f1f81
+)
+
+FetchContent_Declare(
+  sqlw
+  GIT_REPOSITORY https://github.com/jayblin/sqlw.git
+  GIT_TAG        d507afbc132210fd24b0a959cd909430ee556843
+)
+
+FetchContent_Declare(
+	json
+	URL
+	https://github.com/nlohmann/json/releases/download/v3.11.2/json.tar.xz
+)
+
+FetchContent_MakeAvailable(sock sqlw json)
+
+target_link_libraries(
+	home_api
+	PRIVATE
+		sock
+		nlohmann_json::nlohmann_json
+		sqlw
+)
+
+# TESTS
+
+# https://google.github.io/googletest/quickstart-cmake.html
+
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+
 FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
-add_custom_target(tests)
+add_custom_target(home_api_tests)
 
 add_executable(
-	tests_executable
-	src/parsor.cpp
-	tests/parsor.cpp
-	src/status_line_parser.cpp
-	tests/status_line_parser.cpp
-	src/headers_parser.cpp
-	tests/headers_parser.cpp
-	src/request_parser.cpp
-	tests/request_parser.cpp
+	home_api_tests_executable
+	src/http/parsor.cpp
+
+	src/http/status_line_parser.cpp
+	tests/http/status_line_parser.cpp
+
+	src/http/request_parser.cpp
+	tests/http/request_parser.cpp
+
+	src/http/query_parser.cpp
+	tests/http/query_parser.cpp
+
+	src/http/headers_parser.cpp
+	tests/http/headers_parser.cpp
+
+	# src/local/util.cpp
+	# tests/local/util.cpp
+	# src/util/db.cpp
+	# tests/util/db.cpp
+	# src/util/http.cpp
+	# src/route_map.cpp
+	# src/routes/index.cpp
+	# src/server/server.cpp
+	# tests/main.cpp
+	# src/db/db.cpp
+	# tests/db/migration.cpp
 )
 
 target_link_libraries(
-	tests_executable
-	GTest::gtest_main
+	home_api_tests_executable
+	PRIVATE
+		GTest::gtest_main
+		sock
+		sqlw
+		nlohmann_json::nlohmann_json
 )
-
-set_property(TARGET tests_executable PROPERTY CXX_STANDARD 20)
 
 target_include_directories(
-	tests_executable
+	home_api_tests_executable
 	PUBLIC
-	${CMAKE_SOURCE_DIR}/include/local
-	${CMAKE_SOURCE_DIR}/include
+		include
 )
 
-add_dependencies(tests tests_executable)
+add_dependencies(home_api_tests home_api_tests_executable)
 
 include(GoogleTest)
-gtest_discover_tests(tests_executable)
 
-#~GoogleTest
+# gtest_discover_tests(home_api_tests_executable)
 
-FetchContent_Declare(
-  sock
-  GIT_REPOSITORY https://github.com/jayblin/sock.git
-  GIT_TAG        9d3c63509259adc37c37bbc3e1b6862f1a48a29b
+#~TESTS
+
+# INSTALL
+
+add_custom_target(home_api_install)
+
+add_executable(
+	home_api_install_executable
+	src/install.cpp
+	# src/local/utils.cpp
 )
 
-FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.2/json.tar.xz)
+target_link_libraries(
+	home_api_install_executable
+	PRIVATE
+		sock
+		sqlw
+		nlohmann_json::nlohmann_json
+)
 
-FetchContent_MakeAvailable(sock json)
+add_dependencies(home_api_install home_api_install_executable)
+
+target_include_directories(
+	home_api_install_executable
+	PUBLIC include
+)
 
 install(
-	TARGETS culinary_api sock
+	# TARGETS sock sqlw home_api home_api_install_executable
+	# TARGETS sqlw home_api_install_executable
+	TARGETS sock sqlw home_api_tests_executable
 	RUNTIME DESTINATION bin
 )
+
+# ~INSTALL
 
 configure_file(
 	${PROJECT_SOURCE_DIR}/include/local/cmake_vars.h.in

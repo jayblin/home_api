@@ -1,7 +1,7 @@
 .cache
 build
 compile_commands.json
-include/local/config.h
+include/local/cmake_vars.h
 CMakeFiles
 Session.vim
 tmp

@@ -1,21 +1,21 @@
 cmake_minimum_required(VERSION 3.23)
 
-project(culinary_api_install VERSION 0.0.1 LANGUAGES CXX)
+project(home_api_install VERSION 0.0.1 LANGUAGES CXX)
 
-add_executable(culinary_api_install install.cpp)
+add_executable(home_api_install install.cpp)
 
-add_dependencies(culinary_api_install sql)
+add_dependencies(home_api_install sqlw)
 
-set_property(TARGET culinary_api_install PROPERTY CXX_STANDARD 20)
+set_property(TARGET home_api_install PROPERTY CXX_STANDARD 20)
 
-target_include_directories(
-	culinary_api_install
-	PUBLIC ${CMAKE_SOURCE_DIR}/lib/sql/include
-)
+# target_include_directories(
+# 	home_api_install
+# 	PUBLIC ${CMAKE_SOURCE_DIR}/lib/sql/include
+# )
 
 target_link_libraries(
-	culinary_api_install
-	PUBLIC sql
+	home_api_install
+	PUBLIC sqlw
 )
 
 configure_file(
@@ -24,6 +24,6 @@ configure_file(
 )
 
 install(
-	TARGETS culinary_api_install sql
+	TARGETS home_api_install sqlw
 	RUNTIME DESTINATION bin
 )

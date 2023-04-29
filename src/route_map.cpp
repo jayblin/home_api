@@ -1,5 +1,4 @@
-#include "route_map.hpp"
-#include "utils.hpp"
+#include "local/route_map.hpp"
 #include <sstream>
 
 RouteMap& RouteMap::add(
@@ -16,7 +15,7 @@ RouteMap& RouteMap::add(
 	return *this;
 }
 
-http::Response RouteMap::match_method_with_request(http::Request& request)
+http::Response RouteMap::match_method_with_request(http::Request& request) const
 {
 	const auto& path = request.target;
 	std::size_t _i = 0;
@@ -30,11 +29,10 @@ http::Response RouteMap::match_method_with_request(http::Request& request)
 		const auto route = path.substr(0, i);
 
 		const auto key = request.method + route;
-		const auto func = m_map[request.method + route];
 
-		if (func)
+		if (m_map.contains(request.method + route))
 		{
-			return func(request);
+			return m_map.at(request.method + route)(request);
 		}
 	}
 

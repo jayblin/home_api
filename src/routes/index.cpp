@@ -1,237 +1,149 @@
 #include "routes/index.hpp"
-#include "config.h"
+#include "http/forward.hpp"
+#include "http/parsor.hpp"
+#include "http/query_parser.hpp"
 #include "http/request.hpp"
-#include "sql/forward.hpp"
-#include "sql/statement.hpp"
-#include "sql/status.hpp"
-#include "tables/definitions.hpp"
-#include "tables/utils.hpp"
-#include "utils.hpp"
+#include "http/response.hpp"
 #include "local/route_map.hpp"
-#include "sql/sqlite3.hpp"
-#include "sql/json_string_result.hpp"
-#include "nlohmann/json.hpp"
-#include <sstream>
-#include <string_view>
-#include <vector>
+#include "server/server.hpp"
+#include "sqlw/forward.hpp"
+#include "sqlw/json_string_result.hpp"
+#include "sqlw/statement.hpp"
+#include "sqlw/status.hpp"
+#include "util/http.hpp"
+#include <charconv>
+#include <optional>
 
 using R = http::Response;
 
-static std::string create_errors_json(const std::vector<std::string>& errors)
+auto get_foods = [](http::Request& request)
 {
-	std::stringstream ss;
+	std::optional<http::Response> response;
 
-	ss << "{\"errors\": [";
+	auto& srv = server::Server::instance();
+	sqlw::Statement stmt {srv.db_connection};
 
-	for (const auto& error : errors)
-	{
-		ss << '"' << error << '"';
-	}
+	http::Parsor parsor {request.query};
+	auto query = (http::QueryParser{}).parse(parsor);
 
-	ss << "]}";
+	const auto limit = query.contains("limit") ? query["limit"].value : "20";
+	const auto page = query.contains("page") ? query["page"].value : "1";
 
-	return ss.str();
-}
+	auto int_limit = 10;
+	auto int_page = 1;
+	std::from_chars(page.data(), page.data() + page.size(), int_page);
+	std::from_chars(limit.data(), limit.data() + limit.size(), int_limit);
 
-static http::Response generate_db_error_response()
-{
-	return R {}
-		.code(http::Code::INTERNAL_SERVER_ERROR)
-		.content(create_errors_json({"Что-то нет так с БД."}))
-		.content_type(http::ContentType::APP_JSON)
-	;
-}
+	const auto offset = (int_page - 1) * int_limit;
 
-static http::Response generate_stmt_error_response(const sql::Statement& stmt)
-{
-	return R {}
-		.code(http::Code::BAD_REQUEST)
-		.content(create_errors_json({sql::status::verbose(stmt)}))
-		.content_type(http::ContentType::APP_JSON)
-	;
-}
+	std::cout << request.query << '\n';
+	stmt
+		.prepare("SELECT * FROM food LIMIT ? OFFSET ?")
+	    .bind(1, limit, sqlw::Type::SQL_INT)
+	    .bind(2, std::to_string(offset), sqlw::Type::SQL_INT);
+	auto jsr = stmt.operator()<sqlw::JsonStringResult>();
 
-static sql::Sqlite3 get_db()
-{
-	return {"culinary.db"};
-}
+	response.emplace(http::Response {}.content(jsr.get_array_result()));
 
-static http::Response generic_get(
-	const tables::Definition* definition,
-	http::Request& request
-)
-{
-	auto db = get_db();
+	/* exec_query( */
+	/*     response, */
+	/*     "SELECT f.* FROM food WHERE LIMIT ?", */
+	/*     [](sqlw::Statement& stmt) */
+	/*     { */
+	/* 	    stmt.bind(1, "10", sqlw::Type::SQL_INT); */
+	/*     }, */
+	/*     [](sqlw::JsonStringResult& result) */
+	/*     { */
+	/* 	    return result.get_array_result(); */
+	/*     } */
+	/* ) && */
+	!response.has_value() && util::http::fallback(response);
 
-	// check if target is refering to cpecific entity by its id.
-
-	/* CLOG(request.target); */
-	/* CLOG(request.query); */
-	std::stringstream ss;
-	ss << "SELECT e0.* FROM " << definition->table_name << " e0";
-
-	auto json = db.exec<sql::JsonStringResult>(ss.str());
-
-	return R {}
-		.content(json.get_array_result())
-		.content_type(http::ContentType::APP_JSON)
-	;
-}
-
-static http::Response generic_post(
-	const tables::Definition* definition,
-	http::Request& request
-)
-{
-	using json = nlohmann::json;
-
-	auto db = get_db();
-
-	json j = json::parse(request.body);
-
-	sql::Statement stmt {
-		db,
-		tables::generate_insert_clause(*definition)
-	};
-	
-	if (!sql::status::is_ok(db))
-	{
-		return generate_db_error_response();
-	}
-
-	const auto errors = tables::get_constraints_errors(*definition, j);
-
-	if (errors.size() > 0)
-	{
-		return R {}
-			.code(http::Code::BAD_REQUEST)
-			.content(create_errors_json(errors))
-		;
-	}
-
-	tables::bind_values(*definition, stmt, j);
-	stmt.exec();
-
-	if (!sql::status::is_ok(stmt))
-	{
-		return generate_stmt_error_response(stmt);
-	}
-
-	std::stringstream ss;
-	ss << "SELECT e0.* FROM " << definition->table_name << " e0 "
-		<< "WHERE e0.id = last_insert_rowid()";
-	;
-	sql::Statement result_stmt {db, ss.str()};
-	auto result = result_stmt.exec<sql::JsonStringResult>();
-
-	if (!sql::status::is_ok(result_stmt))
-	{
-		return generate_stmt_error_response(stmt);
-	}
-
-	return R {}
-		.content(result.get_object_result())
-		.content_type(http::ContentType::APP_JSON)
-	;
-}
-
-struct EndpointDefinition
-{
-	const std::string_view table_name;
-	const std::string_view endpoint_name;
+	return response.value();
 };
+
+/* auto post_foods = [](http::Request& request) */
+/* { */
+/* 	using json = nlohmann::json; */
+/* 	json body = json::parse(request.body); */
+
+/* 	std::optional<http::Response> response; */
+
+/* 	check_constraints<Food>(response, body) */
+/* 	    && transact( */
+/* 	        response, */
+/* 	        concat_queries<2>( */
+/* 	            {generate_insert_clause<Food>(), */
+/* 	             generate_select_last_insert(Food::table_name)} */
+/* 	        ), */
+/* 	        [&](sqlw::Statement& stmt) */
+/* 	        { */
+/* 		        bind_values<Food>(stmt, body); */
+/* 	        }, */
+/* 	        [](sqlw::JsonStringResult& json) */
+/* 	        { */
+/* 		        return json.get_object_result(); */
+/* 	        } */
+/* 	    ) */
+/* 	    && fallback(response); */
+
+/* 	return response.value(); */
+/* }; */
 
 RouteMap::RouteMap()
 {
+	add(http::Method::GET, "/api/foods", get_foods);
 
-	/* const std::vector<EndpointDefinition> endpoint_definitions = { */
-	/* 	{ "food", "foods"}, */
-	/* }; */
+	/* add(http::Method::POST, "/api/foods", post_foods); */
 
-	for (const auto& definition : tables::definitions())
-	{
-		/* const auto endpoint_definition = std::ranges::find_if( */
-		/* 	endpoint_definitions, */
-		/* 	[&definition](const EndpointDefinition& r){return r.table_name == definition.table_name;} */
-		/* ); */
+	/* add(http::Method::GET, */
+	/*     "/api/recipes", */
+	/*     [](http::Request& request) */
+	/*     { */
+	/* 	    std::optional<http::Response> response; */
 
-		/* if (endpoint_definition == endpoint_definitions.end()) */
-		/* { */
-		/* 	continue; */
-		/* } */
+	/* 	    exec_query( */
+	/* 	        response, */
+	/* 	        R"(SELECT */
+	/* 				f.*, */
+	/* 				( */
+	/* 					SELECT */
+	/* 						json_group_array(i.id) */
+	/* 					FROM food i */
+	/* 					INNER JOIN food_composition fc */
+	/* 						ON fc.particular_id = i.id AND fc.composite_id =
+	 * f.id
+	 */
+	/* 					GROUP BY fc.composite_id */
+	/* 				) ingredient_ids */
+	/* 			FROM food f */
+	/* 			WHERE ingredient_ids IS NOT NULL */
+	/* 			LIMIT ?)", */
+	/* 	        [](sqlw::Statement& stmt) */
+	/* 	        { */
+	/* 		        stmt.bind(1, "10", sqlw::Type::SQL_INT); */
+	/* 	        }, */
+	/* 	        [](sqlw::JsonStringResult& result) */
+	/* 	        { */
+	/* 		        return result.get_array_result(); */
+	/* 	        } */
+	/* 	    ) && fallback(response); */
 
-		const auto* definition_ptr = &definition;
-		add(
-			http::Method::GET,
-			std::string{"/api/"} + std::string{definition.table_name},
-			[definition_ptr](http::Request& request)
-			{
-				return generic_get(definition_ptr, request);
-			}
-		);
-		add(
-			http::Method::POST,
-			std::string{"/api/"} + std::string{definition.table_name},
-			[definition_ptr](http::Request& request)
-			{
-				return generic_post(definition_ptr, request);
-			}
-		);
-	}
+	/* 	    return response.value(); */
+	/*     }); */
 
-	add(
-		http::Method::GET,
-		"/api/recipes",
-		[](http::Request& request)
-		{
-			auto db = get_db();
-
-			if (!sql::status::is_ok(db))
-			{
-				return generate_db_error_response();
-			}
-
-			sql::Statement stmt {
-				db,
-				R"(SELECT
-					f.*,
-					(
-						SELECT
-							json_group_array(i.id)
-						FROM food i
-						INNER JOIN food_composition fc
-							ON fc.particular_id = i.id AND fc.composite_id = f.id
-						GROUP BY fc.composite_id
-					) ingredient_ids
-				FROM food f
-				WHERE ingredient_ids IS NOT NULL
-				LIMIT ?)"
-			};
-
-			stmt.bind(1, "10", sql::Type::SQL_INT);
-
-			auto result = stmt.exec<sql::JsonStringResult>();
-
-			return R {}
-				.content(result.get_array_result())
-				.content_type(http::ContentType::APP_JSON)
-			;
-		}
-	);
-
-	add(
-		http::Method::GET,
-		"/",
-		[](http::Request&){
-			return R {}.content(
-				"<!DOCTYPE html>"
-				"<html>"
-				"<body>"
-				"INDEX PAGE"
-				"<img src=\"/The_army_of_titanium_dioxide_nanotubes(1).jpg\"/>"
-				"</body>"
-				"</html>"
-			);
-		}
-	);
+	add(http::Method::GET,
+	    "/",
+	    [](http::Request&)
+	    {
+		    return R {}.content(
+		        "<!DOCTYPE html>"
+		        "<html>"
+		        "<body>"
+		        "INDEX PAGE"
+		        "<img src=\"/The_army_of_titanium_dioxide_nanotubes(1).jpg\"/>"
+		        "</body>"
+		        "</html>"
+		    );
+	    });
 }

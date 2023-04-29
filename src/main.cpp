@@ -1,4 +1,3 @@
-#include "config.h"
 #include "http/headers_parser.hpp"
 #include "http/request.hpp"
 #include "http/request_parser.hpp"
@@ -14,40 +13,6 @@
 #include <sstream>
 #include <string>
 #include <string_view>
-
-/**
- * If status of `response` is NOT_FOUND than this function will check if
- * a file was requested and will return a filestream.
- *
- * @return std::ifstream Filestream of requested resource.
- */
-std::ifstream
-    try_get_file(const http::Request& request, http::Response& response)
-{
-	if (http::Code::NOT_FOUND == response.code() &&
-	    std::string::npos == request.target.find(".."))
-	{
-		const auto p = std::filesystem::path(PUBLIC_DIR + request.target);
-
-		if (std::filesystem::exists(p))
-		{
-			response.code(http::Code::OK);
-
-			if (0 == p.extension().compare(".ico"))
-			{
-				response.content_type(http::ContentType::IMG_X_ICON);
-			}
-			else if (0 == p.extension().compare(".jpg"))
-			{
-				response.content_type(http::ContentType::IMG_JPG);
-			}
-
-			return std::ifstream {p, std::ifstream::binary};
-		}
-	}
-
-	return std::ifstream {};
-}
 
 int main(int argc, char const* argv[])
 {
