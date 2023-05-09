@@ -2,20 +2,23 @@
 #include <sstream>
 
 RouteMap& RouteMap::add(
-	http::Method method,
-	std::string route,
-	std::function<http::Response (http::Request&)> callback
+    http::Method method,
+    std::string_view path,
+    RouteMap::Route callback
 )
 {
 	auto ss = std::stringstream {};
-	ss << http::method_to_str(method) << route;
+	ss << http::method_to_str(method) << path;
 
 	m_map.insert_or_assign(ss.str(), callback);
 
 	return *this;
 }
 
-http::Response RouteMap::match_method_with_request(http::Request& request) const
+http::Response RouteMap::match_method_with_request(
+    http::Request& request,
+    RouteMap::BodyGetter& get_body
+) const
 {
 	const auto& path = request.target;
 	std::size_t _i = 0;
@@ -28,11 +31,11 @@ http::Response RouteMap::match_method_with_request(http::Request& request) const
 
 		const auto route = path.substr(0, i);
 
-		const auto key = request.method + route;
+		const auto key = std::string {request.method} + std::string {route};
 
-		if (m_map.contains(request.method + route))
+		if (m_map.contains(key))
 		{
-			return m_map.at(request.method + route)(request);
+			return m_map.at(key)(request, get_body);
 		}
 	}
 

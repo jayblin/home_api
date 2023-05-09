@@ -1,4 +1,5 @@
 #include "util/http.hpp"
+#include "http/forward.hpp"
 
 http::Response
     util::http::generate_db_error_response(const sqlw::Connection& con)
@@ -26,7 +27,7 @@ http::Response
 
 bool util::http::fallback(std::optional<::http::Response>& response)
 {
-	response.emplace(::http::Response {}.content("fallback"));
+	response.emplace(::http::Response {}.code(::http::Code::NOT_FOUND));
 
 	return true;
 }

@@ -12,10 +12,8 @@ set(
 add_executable(
 	home_api
 	src/route_map.cpp
-	# src/local/utils.cpp
 	src/http/status_line_parser.cpp
 	src/http/headers_parser.cpp
-	src/http/request_parser.cpp
 	src/http/parsor.cpp
 	src/http/query_parser.cpp
 	src/routes/index.cpp
@@ -39,7 +37,7 @@ FetchContent_Declare(
 FetchContent_Declare(
 	sock
 	GIT_REPOSITORY 	https://github.com/jayblin/sock.git
-	GIT_TAG 		7dd5b5f9b239c877dca3bb349350fdfb4b5f1f81
+	GIT_TAG 		a6643947c404897fd1d6dae8131abbe364e9dd42
 )
 
 FetchContent_Declare(
@@ -80,12 +78,14 @@ add_custom_target(home_api_tests)
 add_executable(
 	home_api_tests_executable
 	src/http/parsor.cpp
+	src/util/json.cpp
+	src/util/http.cpp
+	src/route_map.cpp
+	src/routes/index.cpp
+	src/server/server.cpp
 
 	src/http/status_line_parser.cpp
 	tests/http/status_line_parser.cpp
-
-	src/http/request_parser.cpp
-	tests/http/request_parser.cpp
 
 	src/http/query_parser.cpp
 	tests/http/query_parser.cpp
@@ -93,17 +93,13 @@ add_executable(
 	src/http/headers_parser.cpp
 	tests/http/headers_parser.cpp
 
-	# src/local/util.cpp
-	# tests/local/util.cpp
 	# src/util/db.cpp
 	# tests/util/db.cpp
-	# src/util/http.cpp
-	# src/route_map.cpp
-	# src/routes/index.cpp
-	# src/server/server.cpp
-	# tests/main.cpp
-	# src/db/db.cpp
+
+	src/db/db.cpp
 	# tests/db/migration.cpp
+
+	tests/main.cpp
 )
 
 target_link_libraries(

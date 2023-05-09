@@ -43,6 +43,11 @@ std::unordered_map<std::string_view, http::QueryValue>
 	size_t iters = 0;
 	std::string_view var_name;
 	const auto view = parsor.view();
+	
+	if (parsor.is_end())
+	{
+		m_state = State::FINISHED;
+	}
 
 	while (!is_finished() && iters < 1'000)
 	{

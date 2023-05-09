@@ -1,13 +1,16 @@
 #include "http/headers_parser.hpp"
 #include "http/headers.hpp"
 #include <charconv>
+#include <iomanip>
+#include <iostream>
+#include <system_error>
 
 http::HeadersParser::State
     http::HeadersParser::parse(http::Headers& headers, http::Parsor& parsor)
 {
 	auto iters = 0;
 
-	while (!is_finished() && iters < 1'000'000)
+	while (!is_finished() && iters < 10'000)
 	{
 		iters++;
 
@@ -54,12 +57,16 @@ http::HeadersParser::State
 			}
 			else if (key.compare("Content-Length") == 0)
 			{
-				// @todo Add error handling @see from_chars struct.
-				const auto converted = std::from_chars(
-					value.data(),
-					value.data() + value.length(),
-					headers.content_length
-				);
+				const auto [ptr, ec] {std::from_chars(
+				    value.data(),
+				    value.data() + m_value_len,
+				    headers.content_length
+				)};
+
+				if (ec != std::errc())
+				{
+					headers.content_length = 0;
+				}
 			}
 			else if (key.compare("Connection") == 0)
 			{
@@ -70,8 +77,8 @@ http::HeadersParser::State
 			m_key_start = cur_pos;
 		}
 
-		if (view[cur_pos - 1] == '\r' && view[cur_pos] == '\n' &&
-			view[cur_pos - 3] == '\r' && view[cur_pos - 2] == '\n')
+		if (view[cur_pos - 1] == '\r' && view[cur_pos] == '\n'
+		    && view[cur_pos - 3] == '\r' && view[cur_pos - 2] == '\n')
 		{
 			m_state = State::END;
 		}

@@ -21,7 +21,19 @@ namespace http
 		};
 
 		auto parse(Request&, Parsor&) -> State;
-		auto is_finished() const -> bool { return m_state == State::FINISHED; }
+
+		auto is_finished() const -> bool
+		{
+			return m_state == State::FINISHED;
+		}
+
+		auto reset() -> void
+		{
+			m_state = State::START;
+			m_method_end = 0;
+			m_path_end = 0;
+			m_query_end = 0;
+		}
 
 	private:
 		State m_state = State::START;

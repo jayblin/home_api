@@ -1,5 +1,5 @@
-#ifndef UTILS_H_
-#define UTILS_H_
+#ifndef UTIL_HTTP_H_
+#define UTIL_HTTP_H_
 
 #include "http/response.hpp"
 #include "sqlw/connection.hpp"
@@ -16,4 +16,4 @@ namespace util::http
 
 } // namespace util::http
 
-#endif // UTILS_H_
+#endif // UTIL_HTTP_H_

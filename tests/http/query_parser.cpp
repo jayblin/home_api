@@ -6,6 +6,20 @@
 
 GTEST_TEST(QueryParser, can_parse_no_value)
 {
+	std::string_view empty;
+	http::Parsor parsor {empty};
+	http::Request request;
+	http::QueryParser qp;
+
+	std::unordered_map<std::string_view, http::QueryValue> values =
+	    qp.parse(parsor);
+
+	EXPECT_TRUE(qp.is_finished());
+}
+
+
+GTEST_TEST(QueryParser, can_parse_empty_value)
+{
 	http::Parsor parsor {""};
 	http::Request request;
 	http::QueryParser qp;
