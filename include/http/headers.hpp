@@ -6,13 +6,6 @@
 namespace http
 {
 	struct Headers
-	/* { */
-	/* 	size_t content_length = 0; */
-	/* 	std::string host = ""; */
-	/* 	std::string connection {""}; */
-	/* }; */
-
-	/* struct Headers2 */
 	{
 		size_t content_length {0};
 		std::string_view host {""};

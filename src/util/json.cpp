@@ -22,7 +22,7 @@ std::string
 
 	for (const auto& error : errors)
 	{
-		ss << '"' << error << '"';
+		ss << "{\"detail\":\"" << error << "\"}";
 
 		if (errors.back() != error)
 		{

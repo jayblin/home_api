@@ -11,12 +11,17 @@ set(
 
 add_executable(
 	home_api
-	src/route_map.cpp
-	src/http/status_line_parser.cpp
-	src/http/headers_parser.cpp
 	src/http/parsor.cpp
-	src/http/query_parser.cpp
+	src/util/json.cpp
+	src/util/http.cpp
+	src/util/base64.cpp
+	src/route_map.cpp
 	src/routes/index.cpp
+	src/server/server.cpp
+	src/http/status_line_parser.cpp
+	src/http/query_parser.cpp
+	src/http/headers_parser.cpp
+	src/db/db.cpp
 	src/main.cpp
 )
 
@@ -43,7 +48,7 @@ FetchContent_Declare(
 FetchContent_Declare(
   sqlw
   GIT_REPOSITORY https://github.com/jayblin/sqlw.git
-  GIT_TAG        d507afbc132210fd24b0a959cd909430ee556843
+  GIT_TAG        383d140bae7cc96b351fe370c9b8fdb4aee34aba
 )
 
 FetchContent_Declare(
@@ -80,6 +85,8 @@ add_executable(
 	src/http/parsor.cpp
 	src/util/json.cpp
 	src/util/http.cpp
+	src/util/base64.cpp
+
 	src/route_map.cpp
 	src/routes/index.cpp
 	src/server/server.cpp
@@ -93,11 +100,12 @@ add_executable(
 	src/http/headers_parser.cpp
 	tests/http/headers_parser.cpp
 
-	# src/util/db.cpp
-	# tests/util/db.cpp
+	src/http/parser.cpp
+	tests/http/parser.cpp
 
 	src/db/db.cpp
-	# tests/db/migration.cpp
+	tests/db/db.cpp
+	tests/db/migration.cpp
 
 	tests/main.cpp
 )
@@ -131,8 +139,8 @@ add_custom_target(home_api_install)
 
 add_executable(
 	home_api_install_executable
+	src/db/db.cpp
 	src/install.cpp
-	# src/local/utils.cpp
 )
 
 target_link_libraries(
@@ -151,10 +159,15 @@ target_include_directories(
 )
 
 install(
-	# TARGETS sock sqlw home_api home_api_install_executable
-	# TARGETS sqlw home_api_install_executable
-	TARGETS sock sqlw home_api_tests_executable
-	RUNTIME DESTINATION bin
+	TARGETS
+		sock
+		sqlw
+		home_api_tests_executable
+		home_api_install_executable
+		home_api
+	RUNTIME
+	DESTINATION bin
+	OPTIONAL
 )
 
 # ~INSTALL

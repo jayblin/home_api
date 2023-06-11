@@ -1,5 +1,7 @@
 #include "routes/index.hpp"
+#include "api/api.hpp"
 #include "http/forward.hpp"
+#include "http/parser.hpp"
 #include "http/parsor.hpp"
 #include "http/query_parser.hpp"
 #include "http/request.hpp"
@@ -7,21 +9,27 @@
 #include "local/route_map.hpp"
 #include "nlohmann/json.hpp"
 #include "server/server.hpp"
+#include "sqlw/connection.hpp"
 #include "sqlw/forward.hpp"
 #include "sqlw/json_string_result.hpp"
 #include "sqlw/statement.hpp"
 #include "sqlw/status.hpp"
+#include "util/base64.hpp"
 #include "util/http.hpp"
 #include "util/json.hpp"
 #include <cctype>
 #include <charconv>
+#include <chrono>
 #include <cmath>
+#include <concepts>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string_view>
 #include <tuple>
 
 using R = http::Response;
+using njson = nlohmann::json;
 
 http::Response get_foods(http::Request& request, RouteMap::BodyGetter&)
 {
@@ -87,149 +95,186 @@ http::Response get_foods(http::Request& request, RouteMap::BodyGetter&)
 		ss << "{\"data\":" << jsr.get_array_result() << "}";
 	}
 
-	response.emplace(http::Response {}.content(ss.str()));
+	response.emplace(http::Response {}
+	                     .content_type(http::ContentType::APP_JSON)
+	                     .content(ss.str()));
 
 	!response.has_value() && util::http::fallback(response);
 
 	return response.value();
 };
 
-http::Response
-    post_foods(http::Request& request, RouteMap::BodyGetter& get_body)
+class JsonValueExtractor
 {
-	using njson = nlohmann::json;
-	njson body = njson::parse(get_body());
+public:
+	JsonValueExtractor(std::string_view json)
+	{
+		try
+		{
+			m_json = njson::parse(json);
+		}
+		catch (const njson::exception excp)
+		{
+			m_errors.emplace_back("Erroneous reqeuest body");
+		}
+	}
 
+	auto exists(api::column_name_t col_name) -> bool
+	{
+		return m_json.find(col_name) != m_json.end();
+	}
+
+	auto is_null(api::column_name_t col_name) -> bool
+	{
+		return m_json[col_name].is_null();
+	}
+
+	auto value(api::column_name_t col_name) -> std::string
+	{
+		return util::json::remove_quotes(m_json[col_name].dump());
+	}
+
+	auto errors() -> std::vector<std::string>&
+	{
+		return m_errors;
+	}
+
+private:
+	njson m_json;
+	std::vector<std::string> m_errors;
+};
+
+static_assert(api::is_value_extractor<JsonValueExtractor>);
+
+struct ApiRequestState
+{
+	http::Request& request;
+	RouteMap::BodyGetter& get_body;
+	std::string username;
 	std::optional<http::Response> response;
+};
 
-	/* 	check_constraints<Food>(response, body) */
-	/* 	    && transact( */
-	/* 	        response, */
-	/* 	        concat_queries<2>( */
-	/* 	            {generate_insert_clause<Food>(), */
-	/* 	             generate_select_last_insert(Food::table_name)} */
-	/* 	        ), */
-	/* 	        [&](sqlw::Statement& stmt) */
-	/* 	        { */
-	/* 		        bind_values<Food>(stmt, body); */
-	/* 	        }, */
-	/* 	        [](sqlw::JsonStringResult& json) */
-	/* 	        { */
-	/* 		        return json.get_object_result(); */
-	/* 	        } */
-	/* 	    ) */
-
+bool try_post_food(ApiRequestState& state)
+{
 	auto& srv = server::Server::instance();
 	sqlw::Statement stmt {srv.db_connection};
 
-	using is_required_t = bool;
-	using column_name_t = std::string_view;
-
-	constexpr std::array<std::tuple<column_name_t, sqlw::Type, is_required_t>, 5>
-	    columns {
-	        {{"title", sqlw::Type::SQL_TEXT, true},
-	         {"calories", sqlw::Type::SQL_DOUBLE, false},
-	         {"proteins", sqlw::Type::SQL_DOUBLE, false},
-	         {"carbohydrates", sqlw::Type::SQL_DOUBLE, false},
-	         {"fats", sqlw::Type::SQL_DOUBLE, false}}
-    };
-
-	stmt.prepare("INSERT INTO food (title,calories,proteins,carbohydrates,fats)"
-	             " VALUES (?,?,?,?,?)");
-
-	std::vector<std::string> errors;
-	size_t arg_idx = 0;
-	for (const auto& column : columns)
-	{
-		arg_idx++;
-
-		std::string_view val;
-
-		if (body.find(std::get<column_name_t>(column)) == body.end()
-		    || body[std::get<column_name_t>(column)].is_null())
-		{
-			if (std::get<is_required_t>(column))
-			{
-				errors.push_back(
-				    std::string {std::get<column_name_t>(column)}
-				    + " is required"
-				);
-			}
-			else
-			{
-				switch (std::get<sqlw::Type>(column))
-				{
-					case sqlw::Type::SQL_DOUBLE:
-						val = "0.0";
-						break;
-					case sqlw::Type::SQL_INT:
-						val = "0";
-						break;
-					case sqlw::Type::SQL_TEXT:
-					case sqlw::Type::SQL_BLOB:
-					case sqlw::Type::SQL_NULL:
-						val = "NULL";
-						break;
-				}
-			}
-		}
-		else
-		{
-			switch (std::get<sqlw::Type>(column))
-			{
-				case sqlw::Type::SQL_DOUBLE:
-				case sqlw::Type::SQL_INT:
-					val = body[std::get<column_name_t>(column)].dump();
-					break;
-				case sqlw::Type::SQL_TEXT:
-				case sqlw::Type::SQL_BLOB:
-					val = util::json::remove_quotes(
-					    body[std::get<column_name_t>(column)].dump()
-					);
-					break;
-				case sqlw::Type::SQL_NULL:
-					val = "null";
-					break;
-			}
-		}
-
-		if (errors.empty())
-		{
-			stmt.bind(arg_idx, val, std::get<sqlw::Type>(column));
-		}
-	}
-
-	if (!errors.empty())
-	{
-		response.emplace(http::Response {}
-		                     .code(::http::Code::BAD_REQUEST)
-		                     .content_type(::http::ContentType::APP_JSON)
-		                     .content(util::json::create_errors_json(errors)));
-	}
-
-	stmt.exec();
-
-	auto json = stmt.operator()<sqlw::JsonStringResult>(
-	    "SELECT id,title,calories,proteins,carbohydrates,fats FROM food WHERE id = last_insert_rowid()"
+	auto r = api::create_food<JsonValueExtractor, sqlw::JsonStringResult>(
+	    state.get_body(),
+	    state.username,
+	    srv.db_connection
 	);
 
+	if (std::get<1>(r).size() > 0)
+	{
+		state.response.emplace(
+		    http::Response {}
+		        .code(::http::Code::BAD_REQUEST)
+		        .content_type(::http::ContentType::APP_JSON)
+		        .content(util::json::create_errors_json(std::get<1>(r)))
+		);
+	}
+	else
+	{
+		state.response.emplace(
+		    http::Response {}
+		        .content_type(http::ContentType::APP_JSON)
+		        .content(
+		            "{\"data\":" + std::get<0>(r).get_object_result() + "}"
+		        )
+		);
+	}
+
+	return !state.response.has_value();
+}
+
+bool emplace_basic_auth_request(std::optional<http::Response>& response)
+{
 	response.emplace(
 	    http::Response {}
-	        .content_type(http::ContentType::APP_JSON)
-	        .content("{\"data\":" + json.get_object_result() + "}")
+	        .code(http::Code::UNAUTHORIZED)
+	        .headers(
+	            "WWW-Authenticate: Basic realm=\"API for authorized users\""
+	        )
 	);
 
-	!response.has_value() && util::http::fallback(response);
+	return false;
+}
 
-	return response.value();
+bool authenticate(ApiRequestState& state)
+{
+	auto& srv = server::Server::instance();
+	sqlw::Statement stmt {srv.db_connection};
+
+	http::Parsor p1 {state.request.raw};
+	const auto headers = http::Parser {}.parse(
+	    p1,
+	    http::parser::Context<1, 1> {
+	        .names = {"Authorization"},
+	        .value_delimiters = {"\r\n"},
+	        .declaration_delimiter = ":",
+	        .start_str = "",
+	    }
+	);
+
+	if (headers[0].length() == 0)
+	{
+		return emplace_basic_auth_request(state.response);
+	}
+
+	auto pos = headers[0].find("Basic ");
+
+	if (pos == std::string_view::npos)
+	{
+		return emplace_basic_auth_request(state.response);
+	}
+
+	const auto basic = headers[0].substr(pos + 6);
+
+	const auto login = decode_base64(basic);
+
+	if (login[login.length() - 1] != ':')
+	{
+		return emplace_basic_auth_request(state.response);
+	}
+
+	// @todo: cache this query.
+	std::string username;
+	stmt.prepare("SELECT name FROM \"user\""
+	             " WHERE name = ?")
+	    .bind(1, login.substr(0, login.length() - 1), sqlw::Type::SQL_TEXT);
+	stmt(
+	    [&username](sqlw::Statement::ExecArgs args)
+	    {
+		    username = args.column_value;
+	    }
+	);
+
+	if (username.empty())
+	{
+		return emplace_basic_auth_request(state.response);
+	}
+
+	state.username = std::move(username);
+
+	return true;
+}
+
+http::Response
+    post_foods(http::Request& request, RouteMap::BodyGetter& get_body)
+{
+	ApiRequestState state {request, get_body, {}, {}};
+
+	authenticate(state) && try_post_food(state)
+	    && util::http::fallback(state.response);
+
+	return state.response.value();
 };
 
 RouteMap::RouteMap()
 {
 	add(http::Method::GET, "/api/foods", get_foods);
 	add(http::Method::POST, "/api/foods", post_foods);
-
-	/* add(http::Method::POST, "/api/foods", post_foods); */
 
 	/* add(http::Method::GET, */
 	/*     "/api/recipes", */
@@ -267,19 +312,18 @@ RouteMap::RouteMap()
 	/* 	    return response.value(); */
 	/*     }); */
 
-	/* add(http::Method::GET, */
-	/*     "/", */
-	/*     [](http::Request&) */
-	/*     { */
-	/* 	    return R {}.content( */
-	/* 	        "<!DOCTYPE html>" */
-	/* 	        "<html>" */
-	/* 	        "<body>" */
-	/* 	        "INDEX PAGE" */
-	/* 	        "<img src=\"/The_army_of_titanium_dioxide_nanotubes(1).jpg\"/>"
-	 */
-	/* 	        "</body>" */
-	/* 	        "</html>" */
-	/* 	    ); */
-	/*     }); */
+	add(http::Method::GET,
+	    "/",
+	    [](auto, auto)
+	    {
+		    return R {}.content(
+		        "<!DOCTYPE html>"
+		        "<html>"
+		        "<body>"
+		        "INDEX PAGE"
+		        "<img src=\"/The_army_of_titanium_dioxide_nanotubes(1).jpg\"/>"
+		        "</body>"
+		        "</html>"
+		    );
+	    });
 }

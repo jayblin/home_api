@@ -15,11 +15,14 @@ static void log_migration(
 	std::stringstream insert;
 	const auto timestamp = std::time(nullptr);
 
-	insert << "INSERT INTO migration (filename, executed_at_stamp) "
+	/**
+	 * @todo: rework executed_at to work with string-datetime representation.
+	 */
+	insert << "INSERT INTO migration (filename, executed_at) "
 	       << "VALUES ('" << entry.path().filename().string() << "', '"
 	       << timestamp << "')";
 
-	sqlw::Statement {&con}(insert.view());
+	sqlw::Statement {&con}(insert.str());
 }
 
 static bool check_meta_table_exists(sqlw::Connection& con)
@@ -87,7 +90,7 @@ static void execute_migration(
 	auto sstream = std::stringstream {};
 	sstream << fstream.rdbuf();
 
-	sqlw::Statement {&con}(sstream.view());
+	sqlw::Statement {&con}(sstream.str());
 }
 
 static void print_sql_error(const sqlw::Connection& con)

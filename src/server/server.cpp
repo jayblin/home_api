@@ -11,10 +11,14 @@
 #include "sock/socket_wrapper.hpp"
 #include "sock/utils.hpp"
 #include "sqlw/connection.hpp"
+#include <chrono>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <string_view>
 #include <thread>
 #include <utility>
 
@@ -30,7 +34,8 @@ static std::ifstream
 	if (http::Code::NOT_FOUND == response.code()
 	    && std::string::npos == request.target.find(".."))
 	{
-		const auto p = std::filesystem::path {PUBLIC_DIR} / request.target;
+		const auto p =
+		    std::filesystem::path {PUBLIC_DIR} / request.target.substr(1);
 
 		if (std::filesystem::exists(p))
 		{
@@ -52,15 +57,18 @@ static std::ifstream
 	return std::ifstream {};
 }
 
-static std::string headers(const http::Response& response)
+static std::string compile(const http::Response& response)
 {
 	auto ss = std::stringstream {};
+
+	const std::string_view headers = response.headers();
 
 	ss << "HTTP/1.1 " << http::code_to_int(response.code()) << " "
 	   << http::code_to_str(response.code()) << "\r\n"
 	   << "Content-type: "
 	   << http::content_type_to_str(response.content_type())
 	   << "; charset=" << http::charset_to_str(response.charset()) << "\r\n"
+	   << headers << (headers.length() > 0 ? "\r\n" : "")
 	   << "\r\n";
 
 	return ss.str();
@@ -70,14 +78,14 @@ static auto perform_response(
     const RouteMap& map,
     http::Request& request,
     sock::SocketWrapper& client,
-	RouteMap::BodyGetter& get_body
+    RouteMap::BodyGetter& get_body
 )
 {
 	auto response = map.match_method_with_request(request, get_body);
 
 	auto requested_file = try_get_file(request, response);
 
-	client.send(headers(response));
+	client.send(compile(response));
 
 	if (response.content().length() > 0)
 	{
@@ -93,9 +101,9 @@ static auto perform_response(
 
 		do
 		{
-			std::memset(buf, 0, BODY_LEN);
+			/* std::memset(buf, 0, BODY_LEN); */
 
-			requested_file.read(buf, BODY_LEN - 1);
+			requested_file.read(buf, BODY_LEN);
 
 			const auto count = requested_file.gcount();
 
@@ -147,6 +155,12 @@ void server::start(sock::Address address, sqlw::Connection* db_connection)
 	while (1)
 	{
 		auto conn = server_sock.accept();
+		const auto t = std::chrono::system_clock::to_time_t(
+		    std::chrono::system_clock::now()
+		);
+
+		/* std::cout << '\n' */
+		/*           << std::put_time(std::localtime(&t), "%X %d.%m.%Y") << '\n'; */
 
 		conn.callback(
 		    [](sock::Socket& s)
@@ -164,29 +178,33 @@ void server::start(sock::Address address, sqlw::Connection* db_connection)
 		    [&map](sock::SocketWrapper&& client_connection)
 		    {
 			    http::Request request;
-				std::stringstream body_stream;
+			    std::stringstream body_stream;
 
-				RouteMap::BodyGetter get_body =
+			    // @todo: find out what is mutable.
+			    RouteMap::BodyGetter get_body =
 			        [&client_connection, &body_stream, &request]() mutable
 			    {
+				    if (request.headers.content_length <= 0)
+				    {
+					    // @todo: set some kinda status?
+					    return body_stream.str();
+				    }
+
 				    sock::Buffer buffer;
 
+					int i = 0;
 				    do
-				    {
-						client_connection.receive(buffer);
-
-					    if (buffer.received_size() <= 0
-					        || client_connection.status() != sock::Status::GOOD
-					        || request.headers.content_length <= 0
-					        || body_stream.view().length()
-					               >= request.headers.content_length)
-					    {
-						    break;
-					    }
-
+					{
+						i++;
+					    // @todo: inform client if response body didn't fit in
+					    // buffer.
+					    client_connection.receive(buffer);
 					    body_stream << buffer.view();
 				    }
-				    while (1);
+				    while (buffer.received_size() > 0
+				           && client_connection.status() == sock::Status::GOOD
+				           && body_stream.view().length()
+				                  < request.headers.content_length);
 
 				    return body_stream.str();
 			    };
@@ -205,7 +223,9 @@ void server::start(sock::Address address, sqlw::Connection* db_connection)
 					    break;
 				    }
 
-				    http::Parsor parsor {buffer.view()};
+				    request.raw += buffer.view();
+
+				    http::Parsor parsor {request.raw};
 
 				    if (!slp.is_finished())
 				    {
@@ -219,16 +239,31 @@ void server::start(sock::Address address, sqlw::Connection* db_connection)
 
 				    if (slp.is_finished() && hp.is_finished())
 				    {
-						if (!parsor.is_end())
-						{
-							body_stream << parsor.view().substr(parsor.cur_pos());
-						}
+					    if (!parsor.is_end())
+					    {
+						    body_stream
+						        << parsor.view().substr(parsor.cur_pos());
+					    }
 
-					    perform_response(map, request, client_connection, get_body);
+						/* std::cout << request.raw << '\n'; */
+					    /* std::cout << "HTTP v" << request.http_version << " [" */
+					    /*           << request.method << "] " << request.target */
+					    /*           << " " << request.query << '\n'; */
+
+					    perform_response(
+					        map,
+					        request,
+					        client_connection,
+					        get_body
+					    );
 
 					    request = http::Request {};
 					    slp.reset();
 					    hp.reset();
+					    body_stream.str("");
+					    body_stream.clear();
+
+						/* break; */
 				    }
 			    }
 			    while (1);

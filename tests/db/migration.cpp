@@ -14,8 +14,15 @@
 #include <tuple>
 #include <unordered_map>
 
+static void
+    sqlite_error_log_callback(void* pArg, int iErrCode, const char* zMsg)
+{
+	std::cout << "SQLITE ERROR [" << iErrCode << "] " << zMsg << '\n';
+}
+
 GTEST_TEST(migrate, warns_when_folder_does_not_exist)
 {
+	sqlite3_config(SQLITE_CONFIG_LOG, sqlite_error_log_callback, nullptr);
 	const auto db_path = std::filesystem::path {PROJECT_DIR}
 	                   / "tests/resources/db_does_not_exist/test.db";
 
@@ -150,8 +157,8 @@ GTEST_TEST(migrate, does_execute_all_migrations)
 	}
 
 	{
-		stmt("INSERT INTO food (id,title) VALUES (10,'composite');"
-		     "INSERT INTO food (id,title) VALUES (20,'composite');"
+		stmt("INSERT INTO food (id,title) VALUES (10,'composite 1');"
+		     "INSERT INTO food (id,title) VALUES (20,'composite 2');"
 		     "INSERT INTO food_composition (composite_id, particular_id)"
 		     " VALUES (10,20);");
 

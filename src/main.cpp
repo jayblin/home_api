@@ -3,6 +3,10 @@
 #include "sqlw/connection.hpp"
 #include <iostream>
 
+/**
+ * @todo:
+ * - inform client about sql-error;
+ */
 static void
     sqlite_error_log_callback(void* pArg, int iErrCode, const char* zMsg)
 {
@@ -13,9 +17,8 @@ int main(int argc, char const* argv[])
 {
 	sqlite3_config(SQLITE_CONFIG_LOG, sqlite_error_log_callback, nullptr);
 
-	sqlw::Connection con {(std::filesystem::path {DATABASE_NAME}
-	                       / "tests/resources/db/app_test.db")
-	                          .string()};
+	sqlw::Connection con {
+	    (std::filesystem::path {DATABASE_DIR} / DATABASE_NAME).string()};
 
 	server::start({.host = "localhost", .port = "5541"}, &con);
 

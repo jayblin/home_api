@@ -3,4 +3,4 @@ CREATE TABLE IF NOT EXISTS food_composition (
 	particular_id INTEGER,
 	FOREIGN KEY (composite_id) REFERENCES food(id),
 	FOREIGN KEY (particular_id) REFERENCES food(id)
-) STRICT;
+) STRICT

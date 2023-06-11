@@ -8,16 +8,6 @@
 
 namespace http
 {
-	/* struct Request */
-	/* { */
-	/* 	std::string method; */
-	/* 	std::string target; */
-	/* 	std::string query; */
-	/* 	int http_version; */
-	/* 	std::string body; */
-	/* 	http::Headers headers; */
-	/* }; */
-
 	struct Request
 	{
 		std::string raw;

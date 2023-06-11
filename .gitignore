@@ -5,3 +5,4 @@ include/local/cmake_vars.h
 CMakeFiles
 Session.vim
 tmp
+tests/resources/db
