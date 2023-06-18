@@ -20,22 +20,25 @@ http::Response RouteMap::match_method_with_request(
     RouteMap::BodyGetter& get_body
 ) const
 {
-	const auto& path = request.target;
-	std::size_t _i = 0;
-	std::size_t i = 0;
+	std::string key =
+	    std::string {request.method} + std::string {request.target};
 
-	while (i != std::string::npos && i < path.size() && _i < 100)
+	if (m_map.contains(key))
 	{
-		_i++;
-		i = path.find("/", i + 1);
+		return m_map.at(key)(request, get_body);
+	}
 
-		const auto route = path.substr(0, i);
-
-		const auto key = std::string {request.method} + std::string {route};
-
-		if (m_map.contains(key))
+	for (size_t i = request.target.length() - 1; i > 0; i--)
+	{
+		if ('/' == request.target[i])
 		{
-			return m_map.at(key)(request, get_body);
+			key = std::string {request.method}
+			    + std::string {request.target.substr(0, i)};
+
+			if (m_map.contains(key))
+			{
+				return m_map.at(key)(request, get_body);
+			}
 		}
 	}
 

@@ -7,6 +7,8 @@
 #include "sqlw/status.hpp"
 #include <array>
 #include <concepts>
+#include <ctime>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -217,8 +219,8 @@ namespace api
 		}
 
 		stmt.prepare(R"(
-		INSERT INTO user_food_log (user_id, food_id)
-			SELECT info.user_id, info.food_id
+		INSERT INTO user_food_log (user_id, food_id, created_at)
+			SELECT info.user_id, info.food_id, info.created_at
 			FROM (
 				WITH
 				user_info AS (
@@ -230,12 +232,24 @@ namespace api
 					SELECT f.id AS food_id
 					FROM food f
 					WHERE f.id = last_insert_rowid()
+				),
+				creation_info AS (
+					SELECT (?) AS created_at
 				)
-				SELECT * FROM user_info, food_info
+				SELECT * FROM user_info, food_info, creation_info
 			) AS info;
 		)");
 
+		// todo: Extract into utility-function.
+		const auto t = std::chrono::system_clock::to_time_t(
+		    std::chrono::system_clock::now()
+		);
+		std::stringstream time_ss;
+
+		time_ss << std::put_time(std::gmtime(&t), "%Y-%m-%d %H:%M:%S");
+
 		stmt.bind(1, username, sqlw::Type::SQL_TEXT);
+		stmt.bind(2, time_ss.str(), sqlw::Type::SQL_TEXT);
 
 		if (!sqlw::status::is_ok(stmt.status()))
 		{
@@ -255,13 +269,12 @@ namespace api
 			return result;
 		}
 
-		std::get<Retriever>(result) = stmt.operator()<Retriever>(R"(
-		SELECT f.*
-		FROM food f
-		INNER JOIN user_food_log ufl
-			ON ufl.food_id = f.id
-		WHERE ufl.id = last_insert_rowid()
-	)");
+		std::get<Retriever>(result) =
+		    stmt.operator()<Retriever>("SELECT f.* "
+		                               "FROM food f "
+		                               "INNER JOIN user_food_log ufl "
+		                               "	ON ufl.food_id = f.id "
+		                               "WHERE ufl.id = last_insert_rowid()");
 
 		if (!sqlw::status::is_ok(stmt.status()))
 		{

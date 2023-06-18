@@ -9,6 +9,7 @@
 #include "local/route_map.hpp"
 #include "nlohmann/json.hpp"
 #include "server/server.hpp"
+#include "sqlw/concepts.hpp"
 #include "sqlw/connection.hpp"
 #include "sqlw/forward.hpp"
 #include "sqlw/json_string_result.hpp"
@@ -17,6 +18,7 @@
 #include "util/base64.hpp"
 #include "util/http.hpp"
 #include "util/json.hpp"
+#include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <chrono>
@@ -31,68 +33,163 @@
 using R = http::Response;
 using njson = nlohmann::json;
 
-http::Response get_foods(http::Request& request, RouteMap::BodyGetter&)
+bool are_ids_valid(std::string_view ids)
+{
+	for (const char c : ids)
+	{
+		if (!(c == ',' || std::isdigit(c)))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+constexpr std::string_view select_food()
+{
+	return "SELECT id,title,calories,proteins,carbohydrates,fats FROM food f";
+}
+
+struct GetParams
+{
+	GetParams(
+	    std::string_view a_target,
+	    std::string_view a_limit,
+	    std::string_view a_page,
+	    std::string_view a_ids
+	)
+	{
+		this->ids = a_ids;
+		this->limit = a_limit;
+
+		int _limit;
+
+		// @todo: check from_chars
+		std::from_chars(
+		    a_page.data(),
+		    a_page.data() + a_page.size(),
+		    this->page
+		);
+		std::from_chars(
+		    a_limit.data(),
+		    a_limit.data() + a_limit.size(),
+		    _limit
+		);
+
+		this->offset = (this->page - 1) * _limit;
+
+		size_t i = 0;
+		for (auto it = a_target.crbegin(); it != a_target.crend(); ++it)
+		{
+			if (std::isdigit(*it))
+			{
+				this->id = (*it - '0') * std::pow(10, i);
+				i++;
+			}
+
+			if (*it == '/')
+			{
+				break;
+			}
+		}
+	}
+
+	int id {-1};
+	std::string_view limit {"10"};
+	int page {1};
+	int offset {0};
+	std::string_view ids {""};
+};
+
+enum class QueryType
+{
+	ID,
+	IDS,
+	OFFSET,
+};
+
+template<typename T>
+requires sqlw::can_be_used_by_statement<T>
+std::tuple<QueryType, T> exec_get_params_query(
+    const GetParams& gp,
+    sqlw::Connection* con,
+    std::string_view sql,
+    std::string_view table_specifier,
+    std::string_view post_where_sql = ""
+)
+{
+	sqlw::Statement stmt {con};
+
+	std::stringstream ss;
+	std::stringstream sql_ss;
+	sql_ss << sql;
+
+	if (gp.id != -1)
+	{
+		sql_ss << " WHERE " << table_specifier << ".id = ? " << post_where_sql;
+		stmt.prepare(sql_ss.str())
+		    .bind(1, std::to_string(gp.id), sqlw::Type::SQL_INT);
+
+		return {QueryType::ID, stmt.operator()<T>()};
+	}
+	else if (gp.ids.length() > 0 && are_ids_valid(gp.ids))
+	{
+		sql_ss << " WHERE " << table_specifier << ".id IN (" << gp.ids << ") "
+		       << post_where_sql;
+
+		stmt.prepare(sql_ss.str());
+
+		return {QueryType::IDS, stmt.operator()<T>()};
+	}
+
+	sql_ss << post_where_sql << " LIMIT ? OFFSET ? ";
+	stmt.prepare(sql_ss.str())
+	    .bind(1, gp.limit, sqlw::Type::SQL_INT)
+	    .bind(2, std::to_string(gp.offset), sqlw::Type::SQL_INT);
+
+	return {QueryType::OFFSET, stmt.operator()<T>()};
+};
+
+http::Response generic_get(
+    http::Request& request,
+    std::string_view select_sql,
+    std::string_view table_specifier,
+    std::string_view post_where_sql = ""
+)
 {
 	std::optional<http::Response> response;
 
 	auto& srv = server::Server::instance();
-	sqlw::Statement stmt {srv.db_connection};
 
 	http::Parsor parsor {request.query};
 	auto query = (http::QueryParser {}).parse(parsor);
 
-	const auto limit = query.contains("limit") ? query["limit"].value : "20";
-	const auto page = query.contains("page") ? query["page"].value : "1";
+	const auto gp = GetParams {
+	    request.target,
+	    query.contains("limit") ? query["limit"].value : "10",
+	    query.contains("page") ? query["page"].value : "1",
+	    query.contains("ids") ? query["ids"].value : ""};
 
-	auto int_limit = 10;
-	auto int_page = 1;
-	std::from_chars(page.data(), page.data() + page.size(), int_page);
-	std::from_chars(limit.data(), limit.data() + limit.size(), int_limit);
-
-	// @todo: check from_chars
-
-	const auto offset = (int_page - 1) * int_limit;
-
-	size_t i = 0;
-	int id = -1;
-
-	for (auto it = request.target.crbegin(); it != request.target.crend();
-	     ++it)
-	{
-		if (std::isdigit(*it))
-		{
-			id = (*it - '0') * std::pow(10, i);
-			i++;
-		}
-
-		if (*it == '/')
-		{
-			break;
-		}
-	}
+	auto r = exec_get_params_query<sqlw::JsonStringResult>(
+	    gp,
+	    srv.db_connection,
+	    select_sql,
+	    table_specifier,
+	    post_where_sql
+	);
 
 	std::stringstream ss;
 
-	if (id != -1)
+	if (std::get<QueryType>(r) == QueryType::ID)
 	{
-		stmt.prepare("SELECT id,title,calories,proteins,carbohydrates,fats"
-		             " FROM food WHERE id = ?")
-		    .bind(1, std::to_string(id), sqlw::Type::SQL_INT);
-
-		auto jsr = stmt.operator()<sqlw::JsonStringResult>();
-
-		ss << "{\"data\":" << jsr.get_object_result() << "}";
+		ss << "{\"data\":"
+		   << std::get<sqlw::JsonStringResult>(r).get_object_result() << "}";
 	}
 	else
 	{
-		stmt.prepare("SELECT id,title,calories,proteins,carbohydrates,fats"
-		             " FROM food LIMIT ? OFFSET ?")
-		    .bind(1, limit, sqlw::Type::SQL_INT)
-		    .bind(2, std::to_string(offset), sqlw::Type::SQL_INT);
-
-		auto jsr = stmt.operator()<sqlw::JsonStringResult>();
-
-		ss << "{\"data\":" << jsr.get_array_result() << "}";
+		ss << "{\"data\":"
+		   << std::get<sqlw::JsonStringResult>(r).get_array_result() << "}";
 	}
 
 	response.emplace(http::Response {}
@@ -102,6 +199,31 @@ http::Response get_foods(http::Request& request, RouteMap::BodyGetter&)
 	!response.has_value() && util::http::fallback(response);
 
 	return response.value();
+};
+
+http::Response get_foods(http::Request& request, RouteMap::BodyGetter&)
+{
+	return generic_get(request, select_food(), "f");
+};
+
+http::Response get_recipes(http::Request& request, RouteMap::BodyGetter&)
+{
+	return generic_get(
+	    request,
+	    "SELECT "
+	    "f.id food, "
+	    "'[' || GROUP_CONCAT(rs.priority, ',') || ']' steps, "
+	    "'[' || GROUP_CONCAT(rs.cooking_action_id, ',') || ']' actions, "
+	    "'[' || GROUP_CONCAT(rsf.food_id, ',') || ']' foods "
+	    "FROM food f "
+	    "INNER JOIN recipe_step rs "
+	    "ON rs.recipe_id = f.id "
+	    "INNER JOIN recipe_step_food rsf "
+	    "ON rsf.recipe_step_id = rs.id ",
+	    "f",
+	    "GROUP BY f.id "
+	    "ORDER BY rs.priority "
+	);
 };
 
 class JsonValueExtractor
@@ -207,15 +329,16 @@ bool authenticate(ApiRequestState& state)
 	sqlw::Statement stmt {srv.db_connection};
 
 	http::Parsor p1 {state.request.raw};
-	const auto headers = http::Parser {}.parse(
-	    p1,
-	    http::parser::Context<1, 1> {
-	        .names = {"Authorization"},
-	        .value_delimiters = {"\r\n"},
-	        .declaration_delimiter = ":",
-	        .start_str = "",
-	    }
-	);
+	const auto headers = (http::Parser {})
+	                         .parse(
+	                             p1,
+	                             http::parser::Context<1, 1> {
+	                                 .names = {"Authorization"},
+	                                 .value_delimiters = {"\r\n"},
+	                                 .declaration_delimiter = ":",
+	                                 .start_str = "",
+	                             }
+	                         );
 
 	if (headers[0].length() == 0)
 	{
@@ -271,46 +394,160 @@ http::Response
 	return state.response.value();
 };
 
+auto check_numeric_value_operator(const std::string_view& value)
+{
+	if (value.length() > 2
+	    && (('<' == value[0] && '=' == value[1])
+	        || ('>' == value[0] && '=' == value[1])))
+	{
+		return 2;
+	}
+	else if (value.length() > 1 && ('<' == value[0] || '>' == value[0]))
+	{
+		return 1;
+	}
+
+	return 0;
+}
+
+void construct_filter_clause(
+    std::stringstream& sql_ss,
+    const std::tuple<std::string_view, sqlw::Type>& field,
+    const std::string_view& value
+)
+{
+	switch (std::get<sqlw::Type>(field))
+	{
+		case sqlw::Type::SQL_DOUBLE:
+			{
+				const auto check = check_numeric_value_operator(value);
+
+				sql_ss << std::get<std::string_view>(field) << ' '
+				       << value.substr(0, check) << " ?";
+			}
+			break;
+		default:
+			sql_ss << std::get<std::string_view>(field)
+			       << " LIKE '%' || ? || '%' ";
+	}
+}
+
+http::Response filter_foods(http::Request& request, RouteMap::BodyGetter&)
+{
+	auto& srv = server::Server::instance();
+	sqlw::Statement stmt {srv.db_connection};
+
+	std::optional<http::Response> response;
+
+	http::Parsor parsor {request.query};
+	auto query = (http::QueryParser {}).parse(parsor);
+
+	constexpr std::array<std::tuple<std::string_view, sqlw::Type>, 2>
+	    allowed_fields {
+	        {
+             {"title", sqlw::Type::SQL_TEXT},
+             {"calories", sqlw::Type::SQL_DOUBLE},
+	         }
+    };
+
+	std::stringstream sql_ss;
+	sql_ss << select_food() << " WHERE ";
+
+	int i = 0;
+	for (const auto& field : allowed_fields)
+	{
+		if (!query.contains(std::get<std::string_view>(field)))
+		{
+			continue;
+		}
+
+		if (i++ > 0)
+		{
+			sql_ss << " AND ";
+		}
+
+		const auto& q_value = query.at(std::get<std::string_view>(field));
+
+		if (q_value.values.size() > 0)
+		{
+			sql_ss << " ( ";
+
+			size_t j = 0;
+			for (const auto& value : q_value.values)
+			{
+				if (j++ > 0)
+				{
+					sql_ss << " OR ";
+				}
+
+				construct_filter_clause(sql_ss, field, value);
+			}
+
+			sql_ss << " ) ";
+		}
+		else
+		{
+			construct_filter_clause(sql_ss, field, q_value.value);
+		}
+	}
+
+	stmt.prepare(sql_ss.str());
+
+	i = 0;
+	for (const auto& field : allowed_fields)
+	{
+		if (!query.contains(std::get<std::string_view>(field)))
+		{
+			continue;
+		}
+
+		const auto& q_value = query.at(std::get<std::string_view>(field));
+
+		if (q_value.values.size() > 0)
+		{
+			for (const auto& value : q_value.values)
+			{
+				const auto check = check_numeric_value_operator(value);
+				// @todo: add try incase when value is not convertible to
+				// number
+				stmt.bind(
+				    ++i,
+				    value.substr(check),
+				    std::get<sqlw::Type>(field)
+				);
+			}
+		}
+		else
+		{
+			const auto check = check_numeric_value_operator(q_value.value);
+			// @todo: add try incase when value is not convertible to number
+			stmt.bind(
+			    ++i,
+			    q_value.value.substr(check),
+			    std::get<sqlw::Type>(field)
+			);
+		}
+	}
+
+	auto json = stmt.operator()<sqlw::JsonStringResult>();
+
+	std::stringstream ss;
+	ss << "{\"data\":" << json.get_array_result() << "}";
+
+	response.emplace(http::Response {}
+	                     .content_type(http::ContentType::APP_JSON)
+	                     .content(ss.str()));
+
+	return response.value();
+};
+
 RouteMap::RouteMap()
 {
 	add(http::Method::GET, "/api/foods", get_foods);
+	add(http::Method::GET, "/api/foods/filter", filter_foods);
 	add(http::Method::POST, "/api/foods", post_foods);
 
-	/* add(http::Method::GET, */
-	/*     "/api/recipes", */
-	/*     [](http::Request& request) */
-	/*     { */
-	/* 	    std::optional<http::Response> response; */
-
-	/* 	    exec_query( */
-	/* 	        response, */
-	/* 	        R"(SELECT */
-	/* 				f.*, */
-	/* 				( */
-	/* 					SELECT */
-	/* 						json_group_array(i.id) */
-	/* 					FROM food i */
-	/* 					INNER JOIN food_composition fc */
-	/* 						ON fc.particular_id = i.id AND fc.composite_id =
-	 * f.id
-	 */
-	/* 					GROUP BY fc.composite_id */
-	/* 				) ingredient_ids */
-	/* 			FROM food f */
-	/* 			WHERE ingredient_ids IS NOT NULL */
-	/* 			LIMIT ?)", */
-	/* 	        [](sqlw::Statement& stmt) */
-	/* 	        { */
-	/* 		        stmt.bind(1, "10", sqlw::Type::SQL_INT); */
-	/* 	        }, */
-	/* 	        [](sqlw::JsonStringResult& result) */
-	/* 	        { */
-	/* 		        return result.get_array_result(); */
-	/* 	        } */
-	/* 	    ) && fallback(response); */
-
-	/* 	    return response.value(); */
-	/*     }); */
+	add(http::Method::GET, "/api/recipes", get_recipes);
 
 	add(http::Method::GET,
 	    "/",
