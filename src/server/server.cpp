@@ -68,6 +68,7 @@ static std::string compile(const http::Response& response)
 	   << "Content-type: "
 	   << http::content_type_to_str(response.content_type())
 	   << "; charset=" << http::charset_to_str(response.charset()) << "\r\n"
+	   << "Access-Control-Allow-Origin: *\r\n"
 	   << headers << (headers.length() > 0 ? "\r\n" : "")
 	   << "\r\n";
 

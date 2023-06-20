@@ -51,6 +51,11 @@ constexpr std::string_view select_food()
 	return "SELECT id,title,calories,proteins,carbohydrates,fats FROM food f";
 }
 
+constexpr std::string_view select_cooking_action()
+{
+	return "SELECT id,title,description FROM cooking_action ca";
+}
+
 struct GetParams
 {
 	GetParams(
@@ -143,7 +148,7 @@ std::tuple<QueryType, T> exec_get_params_query(
 		return {QueryType::IDS, stmt.operator()<T>()};
 	}
 
-	sql_ss << post_where_sql << " LIMIT ? OFFSET ? ";
+	sql_ss << " " << post_where_sql << " LIMIT ? OFFSET ? ";
 	stmt.prepare(sql_ss.str())
 	    .bind(1, gp.limit, sqlw::Type::SQL_INT)
 	    .bind(2, std::to_string(gp.offset), sqlw::Type::SQL_INT);
@@ -226,6 +231,17 @@ http::Response get_recipes(http::Request& request, RouteMap::BodyGetter&)
 	);
 };
 
+http::Response
+    get_cooking_actions(http::Request& request, RouteMap::BodyGetter&)
+{
+	return generic_get(
+	    request,
+	    select_cooking_action(),
+	    "ca",
+	    "ORDER BY ca.id ASC"
+	);
+};
+
 class JsonValueExtractor
 {
 public:
@@ -286,6 +302,40 @@ bool try_post_food(ApiRequestState& state)
 	    state.username,
 	    srv.db_connection
 	);
+
+	if (std::get<1>(r).size() > 0)
+	{
+		state.response.emplace(
+		    http::Response {}
+		        .code(::http::Code::BAD_REQUEST)
+		        .content_type(::http::ContentType::APP_JSON)
+		        .content(util::json::create_errors_json(std::get<1>(r)))
+		);
+	}
+	else
+	{
+		state.response.emplace(
+		    http::Response {}
+		        .content_type(http::ContentType::APP_JSON)
+		        .content(
+		            "{\"data\":" + std::get<0>(r).get_object_result() + "}"
+		        )
+		);
+	}
+
+	return !state.response.has_value();
+}
+
+bool try_post_cooking_action(ApiRequestState& state)
+{
+	auto& srv = server::Server::instance();
+	sqlw::Statement stmt {srv.db_connection};
+
+	auto r =
+	    api::create_cooking_action<JsonValueExtractor, sqlw::JsonStringResult>(
+	        state.get_body(),
+	        srv.db_connection
+	    );
 
 	if (std::get<1>(r).size() > 0)
 	{
@@ -394,6 +444,17 @@ http::Response
 	return state.response.value();
 };
 
+http::Response
+    post_cooking_actions(http::Request& request, RouteMap::BodyGetter& get_body)
+{
+	ApiRequestState state {request, get_body, {}, {}};
+
+	authenticate(state) && try_post_cooking_action(state)
+	    && util::http::fallback(state.response);
+
+	return state.response.value();
+};
+
 auto check_numeric_value_operator(const std::string_view& value)
 {
 	if (value.length() > 2
@@ -432,26 +493,21 @@ void construct_filter_clause(
 	}
 }
 
-http::Response filter_foods(http::Request& request, RouteMap::BodyGetter&)
+template<size_t Size>
+http::Response filter(
+    const std::array<std::tuple<std::string_view, sqlw::Type>, Size>&
+        allowed_fields,
+    std::string_view select_sql,
+    http::Request& request,
+    sqlw::Connection* db_connection
+)
 {
-	auto& srv = server::Server::instance();
-	sqlw::Statement stmt {srv.db_connection};
-
-	std::optional<http::Response> response;
-
+	sqlw::Statement stmt {db_connection};
 	http::Parsor parsor {request.query};
 	auto query = (http::QueryParser {}).parse(parsor);
 
-	constexpr std::array<std::tuple<std::string_view, sqlw::Type>, 2>
-	    allowed_fields {
-	        {
-             {"title", sqlw::Type::SQL_TEXT},
-             {"calories", sqlw::Type::SQL_DOUBLE},
-	         }
-    };
-
 	std::stringstream sql_ss;
-	sql_ss << select_food() << " WHERE ";
+	sql_ss << select_sql << " WHERE ";
 
 	int i = 0;
 	for (const auto& field : allowed_fields)
@@ -534,11 +590,44 @@ http::Response filter_foods(http::Request& request, RouteMap::BodyGetter&)
 	std::stringstream ss;
 	ss << "{\"data\":" << json.get_array_result() << "}";
 
-	response.emplace(http::Response {}
-	                     .content_type(http::ContentType::APP_JSON)
-	                     .content(ss.str()));
+	return http::Response {}
+	    .content_type(http::ContentType::APP_JSON)
+	    .content(ss.str());
+}
 
-	return response.value();
+http::Response filter_foods(http::Request& request, RouteMap::BodyGetter&)
+{
+	auto& srv = server::Server::instance();
+
+	constexpr std::array<std::tuple<std::string_view, sqlw::Type>, 2>
+	    allowed_fields {
+	        {
+             {"title", sqlw::Type::SQL_TEXT},
+             {"calories", sqlw::Type::SQL_DOUBLE},
+	         }
+    };
+
+	return filter(allowed_fields, select_food(), request, srv.db_connection);
+};
+
+http::Response
+    filter_cooking_actions(http::Request& request, RouteMap::BodyGetter&)
+{
+	auto& srv = server::Server::instance();
+
+	constexpr std::array<std::tuple<std::string_view, sqlw::Type>, 1>
+	    allowed_fields {
+	        {
+             {"title", sqlw::Type::SQL_TEXT},
+	         }
+    };
+
+	return filter(
+	    allowed_fields,
+	    select_cooking_action(),
+	    request,
+	    srv.db_connection
+	);
 };
 
 RouteMap::RouteMap()
@@ -548,6 +637,12 @@ RouteMap::RouteMap()
 	add(http::Method::POST, "/api/foods", post_foods);
 
 	add(http::Method::GET, "/api/recipes", get_recipes);
+
+	add(http::Method::GET, "/api/cooking_actions", get_cooking_actions);
+	add(http::Method::GET,
+	    "/api/cooking_actions/filter",
+	    filter_cooking_actions);
+	add(http::Method::POST, "/api/cooking_actions", post_cooking_actions);
 
 	add(http::Method::GET,
 	    "/",

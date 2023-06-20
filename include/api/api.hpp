@@ -32,7 +32,7 @@ namespace api
 
 	// clang-format on
 
-	constexpr auto get_foods_definition()
+	constexpr auto get_food_definition()
 	{
 		return std::array<
 		    std::tuple<api::column_name_t, sqlw::Type, api::is_required_t>,
@@ -42,6 +42,18 @@ namespace api
 		     {"proteins", sqlw::Type::SQL_DOUBLE, false},
 		     {"carbohydrates", sqlw::Type::SQL_DOUBLE, false},
 		     {"fats", sqlw::Type::SQL_DOUBLE, false}}
+        };
+	}
+
+	constexpr auto get_coking_action_definition()
+	{
+		return std::array<
+		    std::tuple<api::column_name_t, sqlw::Type, api::is_required_t>,
+		    2> {
+		    {
+             {"title", sqlw::Type::SQL_TEXT, true},
+             {"description", sqlw::Type::SQL_TEXT, false},
+		     }
         };
 	}
 
@@ -197,7 +209,7 @@ namespace api
 		}
 
 		const auto errors =
-		    insert("food", get_foods_definition(), extractor, stmt);
+		    insert("food", get_food_definition(), extractor, stmt);
 
 		if (!errors.empty())
 		{
@@ -287,6 +299,91 @@ namespace api
 		}
 
 		stmt("RELEASE sp_post_foods");
+
+		if (!sqlw::status::is_ok(stmt.status()))
+		{
+			std::get<1>(result).emplace_back(sqlw::status::view(stmt.status())
+			);
+
+			return result;
+		}
+
+		return result;
+	}
+
+	template<typename Extractor, typename Retriever>
+	requires is_value_extractor<Extractor>
+	      && sqlw::can_be_used_by_statement<Retriever>
+	std::tuple<Retriever, std::vector<std::string>> create_cooking_action(
+	    std::string_view values,
+	    sqlw::Connection* db_connection
+	)
+	{
+		std::tuple<Retriever, std::vector<std::string>> result;
+
+		sqlw::Statement stmt {db_connection};
+
+		stmt("SAVEPOINT sp_post_cooking_action");
+
+		if (!sqlw::status::is_ok(stmt.status()))
+		{
+			std::get<1>(result).emplace_back(sqlw::status::view(stmt.status())
+			);
+
+			return result;
+		}
+
+		Extractor extractor {values};
+
+		if (extractor.errors().size() > 0)
+		{
+			std::get<1>(result) = std::move(extractor.errors());
+
+			return result;
+		}
+
+		const auto errors = insert(
+		    "cooking_action",
+		    get_coking_action_definition(),
+		    extractor,
+		    stmt
+		);
+
+		if (!errors.empty())
+		{
+			stmt("ROLLBACK TO sp_post_cooking_action");
+
+			std::get<1>(result) = std::move(errors);
+
+			return result;
+		}
+
+		stmt.exec();
+
+		if (!sqlw::status::is_ok(stmt.status()))
+		{
+			std::get<1>(result).emplace_back(sqlw::status::view(stmt.status())
+			);
+
+			return result;
+		}
+
+		std::get<Retriever>(result) =
+		    stmt.operator()<Retriever>("SELECT ca.id,ca.title,ca.description "
+		                               "FROM cooking_action ca "
+		                               "WHERE ca.id = last_insert_rowid()");
+
+		if (!sqlw::status::is_ok(stmt.status()))
+		{
+			stmt("ROLLBACK TO sp_post_cooking_action");
+
+			std::get<1>(result).emplace_back(sqlw::status::view(stmt.status())
+			);
+
+			return result;
+		}
+
+		stmt("RELEASE sp_post_cooking_action");
 
 		if (!sqlw::status::is_ok(stmt.status()))
 		{

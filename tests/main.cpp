@@ -604,3 +604,286 @@ TEST_F(AppTest, get_recipes)
 	    responses[7]
 	);
 }
+
+TEST_F(AppTest, get_cooking_actions)
+{
+	std::vector<std::string> responses;
+
+	auto client = AppTest::get_client();
+
+	std::thread client_thread {
+	    [&client, &responses]
+	    {
+		    using namespace std::chrono_literals;
+
+		    auto& srvr = server::Server::instance();
+		    sqlw::Statement stmt {srvr.db_connection};
+
+		    stmt("BEGIN EXCLUSIVE TRANSACTION");
+
+		    stmt(
+		        "INSERT INTO cooking_action (id,title,description)"
+		        " VALUES (1,'Mix','Do mixin'),(2,'Boil',NULL),(3,'Fry',NULL),(4,'Season',NULL);"
+		    );
+
+		    client.connect({.host = "localhost", .port = "5541"});
+
+		    while (client.status() == sock::Status::CONNECT_ERROR)
+		    {
+			    std::this_thread::sleep_for(10ms);
+			    client.connect({.host = "localhost", .port = "5541"});
+		    }
+
+		    sock::Buffer buffer;
+
+		    client.send("GET /api/cooking_actions?limit=3 HTTP/1.1\r\n"
+		                "User-Agent: gtest\r\n"
+		                "Host: localhost\r\n"
+		                "\r\n");
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    client.send("GET /api/cooking_actions?limit=3&page=2 HTTP/1.1\r\n"
+		                "User-Agent: gtest\r\n"
+		                "Host: localhost\r\n"
+		                "\r\n");
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    client.send("GET /api/cooking_actions/1 HTTP/1.1\r\n"
+		                "User-Agent: gtest\r\n"
+		                "Host: localhost\r\n"
+		                "\r\n");
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    client.send("GET /api/cooking_actions/?ids=4,1,3 HTTP/1.1\r\n"
+		                "User-Agent: gtest\r\n"
+		                "Host: localhost\r\n"
+		                "\r\n");
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    client.send(
+		        "GET /api/cooking_actions/filter?title=boil HTTP/1.1\r\n"
+		        "User-Agent: gtest\r\n"
+		        "Connection: keep-alive\r\n"
+		        "Host: localhost\r\n"
+		        "\r\n"
+		    );
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    stmt("ROLLBACK");
+	    }};
+
+	client_thread.join();
+
+	ASSERT_EQ(
+	    R"({"data":[)"
+	    R"({"id":1,"title":"Mix","description":"Do mixin"},)"
+	    R"({"id":2,"title":"Boil","description":null},)"
+	    R"({"id":3,"title":"Fry","description":null})"
+	    "]}",
+	    responses[1]
+	);
+
+	ASSERT_EQ(
+	    R"({"data":[)"
+	    R"({"id":4,"title":"Season","description":null})"
+	    "]}",
+	    responses[3]
+	);
+
+	ASSERT_EQ(
+	    R"({"data":)"
+	    R"({"id":1,"title":"Mix","description":"Do mixin"})"
+	    "}",
+	    responses[5]
+	);
+
+	ASSERT_EQ(
+	    R"({"data":[)"
+	    R"({"id":1,"title":"Mix","description":"Do mixin"},)"
+	    R"({"id":3,"title":"Fry","description":null},)"
+	    R"({"id":4,"title":"Season","description":null})"
+	    "]}",
+	    responses[7]
+	);
+
+	ASSERT_EQ(
+	    R"({"data":[)"
+	    R"({"id":2,"title":"Boil","description":null})"
+	    "]}",
+	    responses[9]
+	);
+}
+
+TEST_F(AppTest, post_cooking_action)
+{
+	auto client = AppTest::get_client();
+
+	std::vector<std::string> responses;
+
+	std::unordered_map<std::string, std::string> action_values {};
+
+	std::thread client_thread {
+	    [&client, &action_values, &responses]
+	    {
+		    using namespace std::chrono_literals;
+
+		    auto& srvr = server::Server::instance();
+		    sqlw::Statement stmt {srvr.db_connection};
+
+		    stmt("BEGIN EXCLUSIVE TRANSACTION");
+
+		    stmt("INSERT INTO user (id,name,created_at)"
+		         " VALUES (1,'Clovis','2023-04-25 09:50:31.333')");
+
+		    client.connect({.host = "localhost", .port = "5541"});
+
+		    while (client.status() == sock::Status::CONNECT_ERROR)
+		    {
+			    std::this_thread::sleep_for(10ms);
+			    client.connect({.host = "localhost", .port = "5541"});
+		    }
+
+		    sock::Buffer buffer;
+
+		    // send unauthorized request.
+		    client.send("POST /api/cooking_actions HTTP/1.1\r\n"
+		                "User-Agent: gtest\r\n"
+		                "Connection: keep-alive\r\n"
+		                "Content-Length: 93\r\n"
+		                "Host: localhost\r\n"
+		                "\r\n");
+
+		    client.send(R"({"title":"Fry","description":"Do a frying"})");
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    buffer.reset();
+
+		    // send autohorized request
+
+		    client.send("POST /api/cooking_actions HTTP/1.1\r\n"
+		                "User-Agent: gtest\r\n"
+		                "Connection: keep-alive\r\n"
+		                "Host: localhost\r\n"
+		                "Content-Length: 93\r\n"
+		                "Authorization: Basic Q2xvdmlzOg==\r\n"
+		                "\r\n"
+		                R"({"titl)");
+
+		    client.send(R"(e":"Fry","description":"Do a fryin'"})");
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    buffer.reset();
+
+		    client.send("POST /api/cooking_actions HTTP/1.1\r\n"
+		                "User-Agent: gtest\r\n"
+		                "Connection: keep-alive\r\n"
+		                "Content-Length: 93\r\n"
+		                "Host: localhost\r\n"
+		                "Authorization: Basic Q2xvdmlzOg==\r\n"
+		                "\r\n");
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    buffer.reset();
+
+		    client.send("POST /api/cooking_actions HTTP/1.1\r\n"
+		                "User-Agent: gtest\r\n"
+		                "Connection: keep-alive\r\n"
+		                "Content-Length: 93\r\n"
+		                "Host: localhost\r\n"
+		                "Authorization: Basic Q2xvdmlzOg==\r\n"
+		                "\r\n"
+		                R"({"title":"Fry","description":"Do a boiling"})");
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    client.receive(buffer);
+		    responses.push_back(std::string {buffer.view()});
+
+		    stmt(
+		        "SELECT * FROM cooking_action",
+		        [&action_values](auto a)
+		        {
+			        action_values[std::string {a.column_name}] =
+			            std::string {a.column_value};
+		        }
+		    );
+
+		    stmt("ROLLBACK");
+	    }};
+
+	client_thread.join();
+
+	ASSERT_STREQ("1", action_values["id"].c_str());
+	ASSERT_STREQ("Fry", action_values["title"].c_str());
+	ASSERT_STREQ("Do a fryin'", action_values["description"].c_str());
+
+	ASSERT_EQ(7, responses.size());
+
+	ASSERT_TRUE(
+	    responses[0].substr(0, 25).compare("HTTP/1.1 401 Unauthorized") == 0
+	) << "First request should not succeed because client is not authorized.\n"
+	  << responses[0];
+
+	ASSERT_TRUE(responses[1].substr(0, 15).compare("HTTP/1.1 200 OK") == 0)
+	    << "Second request should succeed" << responses[1];
+
+	ASSERT_EQ(
+	    R"({"data":{"id":1,"title":"Fry","description":"Do a fryin'"}})",
+	    responses[2]
+	) << "In the second part of the response to the second request there should be info about newly created action."
+	  << responses[2];
+
+	ASSERT_TRUE(
+	    responses[3].substr(0, 24).compare("HTTP/1.1 400 Bad Request") == 0
+	)
+	    << "Third request should not succeed" << responses[3];
+
+	ASSERT_EQ(
+	    R"({"errors":[{"detail":"Erroneous reqeuest body"}]})",
+	    responses[4]
+	) << "Second part of the third request should not return any data."
+	  << responses[4];
+
+	ASSERT_TRUE(
+	    responses[5].substr(0, 24).compare("HTTP/1.1 400 Bad Request") == 0
+	) << "Fourth request should not succeed because that action already exists."
+	  << responses[5];
+}
